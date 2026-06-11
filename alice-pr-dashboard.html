@@ -875,6 +875,39 @@
       margin-top: var(--s4)
     }
 
+    .stabs {
+      display: flex;
+      gap: var(--s1);
+      background: var(--surfoff);
+      border-radius: var(--r-md);
+      padding: 3px
+    }
+
+    .stab {
+      padding: 4px var(--s3);
+      border-radius: calc(var(--r-md) - 1px);
+      font-size: var(--xs);
+      font-weight: 500;
+      color: var(--txm);
+      cursor: pointer;
+      white-space: nowrap;
+      border: 1px solid transparent;
+      user-select: none;
+      transition: all var(--tr)
+    }
+
+    .stab:hover {
+      color: var(--tx);
+      background: var(--surfdyn)
+    }
+
+    .stab.active {
+      color: var(--tx);
+      background: var(--surface);
+      border-color: var(--border);
+      box-shadow: var(--sh-sm)
+    }
+
     @media(max-width:900px) {
       .hdr {
         padding: var(--s3) var(--s4)
@@ -980,6 +1013,9 @@
     const S = {
       prs: Object.fromEntries(REPOS.map(r => [r.id, null])),
       ci: {}, inv: {}, tab: 'O2DPG', expCI: new Set(), jkOnly: false,
+      subTab: Object.fromEntries([...REPOS.map(r => r.id), 'all'].map(id => [id, 'open'])),
+      closedPrs: Object.fromEntries([...REPOS.map(r => r.id), 'all'].map(id => [id, null])),
+      closedSince: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
     };
 
     // ── Token ─────────────────────────────────
@@ -1020,34 +1056,201 @@
         return `<div id="sec-${r.id}" class="rsec${r.id === 'O2DPG' ? ' active' : ''}">
       <div class="shdr">
         <div><h${isAll ? '2' : '1'} class="stitle">${title}</h${isAll ? '2' : '1'}><div class="smeta" id="meta-${r.id}">Loading…</div></div>
-        ${ghLink}
+        <div style="display:flex;align-items:center;gap:var(--s4);flex-wrap:wrap">
+          <div class="stabs">
+            <button class="stab active" data-rid="${r.id}" data-sub="open">Open</button>
+            <button class="stab" data-rid="${r.id}" data-sub="closed">Closed</button>
+          </div>
+          ${ghLink}
+        </div>
       </div>
-      <div class="srow" id="stats-${r.id}"></div>
-      <div class="fbar">
-        <input class="finput" type="text" placeholder="Search by title, #number or author…" data-fi="${r.id}">
-        <select class="fsel" data-fci="${r.id}">
-          <option value="">All CI states</option>
-          <option value="ok">✅ Success</option>
-          <option value="err">❌ Failure</option>
-          <option value="warn">⏳ Pending</option>
-          <option value="neu">⬜ No CI</option>
-        </select>
+      <div id="spanel-${r.id}-open" class="spanel">
+        <div class="srow" id="stats-${r.id}"></div>
+        <div class="fbar">
+          <input class="finput" type="text" placeholder="Search by title, #number or author…" data-fi="${r.id}">
+          <select class="fsel" data-fci="${r.id}">
+            <option value="">All CI states</option>
+            <option value="ok">✅ Success</option>
+            <option value="err">❌ Failure</option>
+            <option value="warn">⏳ Pending</option>
+            <option value="neu">⬜ No CI</option>
+          </select>
+        </div>
+        <div class="twrap">
+          <table class="ptbl">
+            <thead><tr>
+              <th style="width:76px">#</th><th>Title</th>${ec}
+              <th style="width:140px">Author</th>
+              <th style="width:95px">Updated</th>
+              <th style="width:220px">CI Status</th>
+            </tr></thead>
+            <tbody id="tb-${r.id}"></tbody>
+          </table>
+        </div>
       </div>
-      <div class="twrap">
-        <table class="ptbl">
-          <thead><tr>
-            <th style="width:76px">#</th><th>Title</th>${ec}
-            <th style="width:140px">Author</th>
-            <th style="width:95px">Updated</th>
-            <th style="width:220px">CI Status</th>
-          </tr></thead>
-          <tbody id="tb-${r.id}"></tbody>
-        </table>
+      <div id="spanel-${r.id}-closed" class="spanel" style="display:none">
+        <div class="tbar" style="margin-bottom:var(--s4)">
+          <label for="closed-since-${r.id}">Merged since</label>
+          <input class="tinput" type="datetime-local" id="closed-since-${r.id}" value="${S.closedSince}">
+          <button class="rbtn" id="closed-load-btn-${r.id}" data-rid="${r.id}" style="flex-shrink:0">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Load
+          </button>
+        </div>
+        <div class="fbar">
+          <input class="finput" type="text" placeholder="Search by title, #number or author…" data-fi-closed="${r.id}">
+        </div>
+        <div class="twrap">
+          <table class="ptbl">
+            <thead><tr>
+              <th style="width:76px">#</th><th>Title</th>${ec}
+              <th style="width:140px">Author</th>
+              <th style="width:190px">Merged At</th>
+            </tr></thead>
+            <tbody id="tb-closed-${r.id}"></tbody>
+          </table>
+        </div>
       </div>
     </div>`;
       }).join('');
       document.querySelectorAll('[data-fi]').forEach(el => el.addEventListener('input', renderTab));
       document.querySelectorAll('[data-fci]').forEach(el => el.addEventListener('change', renderTab));
+      document.querySelectorAll('[data-fi-closed]').forEach(el => el.addEventListener('input', () => renderClosedTbl(el.dataset.fiClosed, S.closedPrs[el.dataset.fiClosed])));
+      document.querySelectorAll('[id^="closed-load-btn-"]').forEach(btn => btn.addEventListener('click', () => {
+        const rid = btn.dataset.rid;
+        S.closedSince = document.getElementById(`closed-since-${rid}`).value;
+        loadClosedPRs(rid);
+      }));
+      document.querySelectorAll('.stab').forEach(btn => btn.addEventListener('click', () => switchSubTab(btn.dataset.rid, btn.dataset.sub)));
+    }
+
+    // ── Sub-tab switching ─────────────────────
+    function switchSubTab(rid, sub) {
+      S.subTab[rid] = sub;
+      const sec = document.getElementById(`sec-${rid}`);
+      if (!sec) return;
+      sec.querySelectorAll('.stab').forEach(b => b.classList.toggle('active', b.dataset.sub === sub));
+      ['open', 'closed'].forEach(s => {
+        const p = document.getElementById(`spanel-${rid}-${s}`);
+        if (p) p.style.display = s === sub ? '' : 'none';
+      });
+      if (sub === 'closed') {
+        if (S.closedPrs[rid] === null) loadClosedPRs(rid);
+        else renderClosedTbl(rid, S.closedPrs[rid]);
+      } else {
+        if (rid === 'all') {
+          const all = REPOS.flatMap(r => (S.prs[r.id] || []).map(p => ({ ...p, _rid: r.id })));
+          renderTbl('all', all.length ? all : null, true); renderStats('all', all.length ? all : null);
+          const m = document.getElementById('meta-all'); if (m && all.length) m.textContent = `${all.length} open PRs across ${REPOS.length} repos`;
+        } else {
+          const prs = S.prs[rid] ? S.prs[rid].map(p => ({ ...p, _rid: rid })) : null;
+          renderTbl(rid, prs, false); renderStats(rid, prs);
+          const m = document.getElementById('meta-' + rid); if (m && prs) m.textContent = `${prs.length} open pull requests`;
+        }
+      }
+    }
+
+    // ── Closed PRs ────────────────────────────
+    async function fetchClosedPRs(rid) {
+      const sinceDate = new Date(S.closedSince || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+      const repos = rid === 'all' ? REPOS : [REPOS.find(r => r.id === rid)];
+      const results = await Promise.allSettled(
+        repos.map(async r => {
+          let all = [], page = 1;
+          while (page <= 5) {
+            const data = await ghGet(`https://api.github.com/repos/${r.full}/pulls?state=closed&sort=updated&direction=desc&per_page=100&page=${page}`);
+            if (!Array.isArray(data) || !data.length) break;
+            all = all.concat(data);
+            const oldestUpdated = new Date(data[data.length - 1].updated_at);
+            if (oldestUpdated < sinceDate) break;
+            if (data.length < 100) break;
+            page++;
+          }
+          return { rid: r.id, data: all };
+        })
+      );
+      const merged = [];
+      results.forEach(res => {
+        if (res.status === 'fulfilled') {
+          res.value.data
+            .filter(pr => pr.merged_at && new Date(pr.merged_at) >= sinceDate)
+            .forEach(pr => merged.push({ ...pr, _rid: res.value.rid }));
+        }
+      });
+      merged.sort((a, b) => new Date(b.merged_at) - new Date(a.merged_at));
+      return merged;
+    }
+
+    function renderClosedTbl(rid, prs) {
+      const fi = document.querySelector(`[data-fi-closed="${rid}"]`);
+      const q = fi ? fi.value.toLowerCase() : '';
+      const tb = document.getElementById(`tb-closed-${rid}`);
+      if (!tb) return;
+      const isAll = rid === 'all';
+      const cs = isAll ? 5 : 4;
+      if (!prs) {
+        tb.innerHTML = Array(6).fill(0).map(() => `<tr>
+          <td><span class="skb sk" style="width:45px"></span></td>
+          <td><span class="skb sk" style="width:${160 + Math.random() * 120 | 0}px"></span></td>
+          ${isAll ? '<td><span class="skb sk" style="width:70px"></span></td>' : ''}
+          <td><span class="skb sk" style="width:80px"></span></td>
+          <td><span class="skb sk" style="width:100px"></span></td>
+        </tr>`).join('');
+        return;
+      }
+      let f = prs;
+      if (q) f = f.filter(p => p.title.toLowerCase().includes(q) || p.user.login.toLowerCase().includes(q) || String(p.number).includes(q));
+      const m = document.getElementById(`meta-${rid}`);
+      if (m) m.textContent = `${f.length} merged pull request${f.length !== 1 ? 's' : ''}`;
+      if (!f.length) {
+        tb.innerHTML = `<tr><td colspan="${cs}" style="padding:0"><div class="empty">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <h3>No merged pull requests found</h3>
+          <p>Try adjusting the date range or search filter.</p>
+        </div></td></tr>`;
+        return;
+      }
+      tb.innerHTML = f.map(pr => {
+        const ma = new Date(pr.merged_at);
+        const mergedAbs = ma.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const mergedRel = relT(pr.merged_at);
+        const labs = (pr.labels || []).slice(0, 4).map(l => `<span class="plab" style="${labStyle(l.color || 'aaaaaa')}">${l.name.replace(/</g, '&lt;')}</span>`).join('');
+        const rc = isAll ? `<td style="font-size:var(--xs);font-family:var(--fm);color:var(--txm);white-space:nowrap">${pr._rid}</td>` : '';
+        return `<tr>
+          <td class="pnum"><a href="${pr.html_url}" target="_blank" rel="noopener noreferrer">#${pr.number}</a></td>
+          <td class="ptc">
+            <a class="ptl" href="${pr.html_url}" target="_blank" rel="noopener noreferrer">${pr.title.replace(/</g, '&lt;')}</a>
+            ${labs ? `<div class="plabs">${labs}</div>` : ''}
+          </td>${rc}
+          <td class="pauth">
+            <img src="${pr.user.avatar_url}&s=48" alt="" width="24" height="24" loading="lazy">
+            <a class="paname" href="https://github.com/${pr.user.login}" target="_blank" rel="noopener noreferrer">${pr.user.login}</a>
+          </td>
+          <td class="pdate" title="${mergedAbs}">${mergedRel}<br><span style="font-size:10px;color:var(--txf)">${mergedAbs}</span></td>
+        </tr>`;
+      }).join('');
+    }
+
+    async function loadClosedPRs(rid) {
+      renderClosedTbl(rid, null);
+      const m = document.getElementById(`meta-${rid}`); if (m) m.textContent = 'Loading…';
+      const btn = document.getElementById(`closed-load-btn-${rid}`);
+      if (btn) { btn.disabled = true; btn.classList.add('loading'); }
+      try {
+        S.closedPrs[rid] = await fetchClosedPRs(rid);
+      } catch (e) {
+        showErr('Could not load closed PRs: ' + e.message);
+        S.closedPrs[rid] = [];
+      }
+      if (btn) { btn.disabled = false; btn.classList.remove('loading'); }
+      renderClosedTbl(rid, S.closedPrs[rid]);
+      // Refresh the stats row so the merged count chip appears
+      if (rid === 'all') {
+        const all = REPOS.flatMap(r => (S.prs[r.id] || []).map(p => ({ ...p, _rid: r.id })));
+        renderStats('all', all.length ? all : null);
+      } else {
+        renderStats(rid, S.prs[rid] ? S.prs[rid].map(p => ({ ...p, _rid: rid })) : null);
+      }
     }
 
     // ── GitHub API ────────────────────────────
@@ -1276,7 +1479,10 @@
       const wrns = prs.filter(p => ciOv(S.ci[`${p._rid || rid}/${p.number}`]) === 'warn').length;
       const noci = prs.filter(p => { const c = S.ci[`${p._rid || rid}/${p.number}`]; return !c || !c.length; }).length;
       const jkc = prs.filter(p => S.inv[`${p._rid || rid}/${p.number}`]?.role).length;
+      const closedPrs = S.closedPrs[rid];
+      const closedCount = closedPrs ? closedPrs.length : null;
       el.innerHTML = `<div class="chip neu">${total} open PRs</div>
+    ${closedCount !== null ? `<div class="chip" style="color:#9a6fcc;background:rgba(154,111,204,.12);border-color:rgba(154,111,204,.45)">🔒 ${closedCount} merged</div>` : ''}
     ${oks ? `<div class="chip ok">✅ ${oks} passing</div>` : ''}
     ${errs ? `<div class="chip err">❌ ${errs} failing</div>` : ''}
     ${wrns ? `<div class="chip warn">⏳ ${wrns} pending</div>` : ''}
@@ -1289,11 +1495,11 @@
       if (t === 'all') {
         const all = REPOS.flatMap(r => (S.prs[r.id] || []).map(p => ({ ...p, _rid: r.id })));
         renderTbl('all', all.length ? all : null, true); renderStats('all', all.length ? all : null);
-        const m = document.getElementById('meta-all'); if (m && all.length) m.textContent = `${all.length} open PRs across ${REPOS.length} repos`;
+        if (S.subTab['all'] === 'open') { const m = document.getElementById('meta-all'); if (m && all.length) m.textContent = `${all.length} open PRs across ${REPOS.length} repos`; }
       } else {
         const prs = S.prs[t] ? S.prs[t].map(p => ({ ...p, _rid: t })) : null;
         renderTbl(t, prs, false); renderStats(t, prs);
-        const m = document.getElementById('meta-' + t); if (m && prs) m.textContent = `${prs.length} open pull requests`;
+        if (S.subTab[t] === 'open') { const m = document.getElementById('meta-' + t); if (m && prs) m.textContent = `${prs.length} open pull requests`; }
       }
     }
     function updBadges() {
