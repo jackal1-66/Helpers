@@ -962,7 +962,7 @@
     </nav>
     <div class="hact">
       <button class="jktgl" id="jktgl" title="Show only PRs involving jackal1-66">
-        <span class="jdot"></span>jackal1-66
+        <span class="jdot"></span><span id="jklabel">jackal1-66</span>
       </button>
       <button class="rbtn" id="rbtn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -996,6 +996,10 @@
         <a href="https://github.com/settings/tokens/new?scopes=repo&description=ALICE+PR+Dashboard" target="_blank"
           rel="noopener noreferrer">Generate token →</a>
       </span>
+      <label for="ghwatch" style="margin-top:var(--s2)">Watch user</label>
+      <input class="tinput" type="text" id="ghwatch"
+        placeholder="GitHub username (default: jackal1-66)" autocomplete="off" style="max-width:240px">
+      <span class="thint" style="margin-top:0">Highlights and filters PRs by this GitHub username. Saved in <code>localStorage</code>.</span>
     </div>
     <div id="errc"></div>
     <div id="secroot"></div>
@@ -1009,13 +1013,14 @@
       { id: 'alidist', full: 'alisw/alidist' },
       { id: 'O2Physics', full: 'AliceO2Group/O2Physics' },
     ];
-    const WATCH = 'jackal1-66';
+    const WATCH_DEFAULT = 'jackal1-66';
+    function getWatch() { return (document.getElementById('ghwatch').value.trim() || WATCH_DEFAULT).toLowerCase(); }
     const S = {
       prs: Object.fromEntries(REPOS.map(r => [r.id, null])),
       ci: {}, inv: {}, tab: 'O2DPG', expCI: new Set(), jkOnly: false,
       subTab: Object.fromEntries([...REPOS.map(r => r.id), 'all'].map(id => [id, 'open'])),
       closedPrs: Object.fromEntries([...REPOS.map(r => r.id), 'all'].map(id => [id, null])),
-      closedSince: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+      closedSince: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
     };
 
     // ── Token ─────────────────────────────────
@@ -1029,6 +1034,17 @@
       const t = document.getElementById('ghtok').value.trim(), el = document.getElementById('tsts');
       if (t) { el.textContent = '● set (' + t.slice(0, 7) + '…)'; el.className = 'tsts ok'; localStorage.setItem('gh_tok', t); }
       else { el.textContent = '● not set'; el.className = 'tsts miss'; localStorage.removeItem('gh_tok'); }
+    }
+    function loadWatch() {
+      const saved = localStorage.getItem('gh_watch');
+      if (saved) document.getElementById('ghwatch').value = saved;
+      updWatch();
+    }
+    function updWatch() {
+      const w = document.getElementById('ghwatch').value.trim() || WATCH_DEFAULT;
+      localStorage.setItem('gh_watch', w);
+      document.getElementById('jklabel').textContent = w;
+      document.getElementById('jktgl').title = 'Show only PRs involving ' + w;
     }
 
     // ── Theme ─────────────────────────────────
@@ -1152,7 +1168,7 @@
 
     // ── Closed PRs ────────────────────────────
     async function fetchClosedPRs(rid) {
-      const sinceDate = new Date(S.closedSince || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+      const sinceDate = new Date(S.closedSince || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
       const repos = rid === 'all' ? REPOS : [REPOS.find(r => r.id === rid)];
       const results = await Promise.allSettled(
         repos.map(async r => {
@@ -1200,27 +1216,32 @@
       }
       let f = prs;
       if (q) f = f.filter(p => p.title.toLowerCase().includes(q) || p.user.login.toLowerCase().includes(q) || String(p.number).includes(q));
+      if (S.jkOnly) f = f.filter(p => S.inv[`${p._rid}/${p.number}`]?.role);
       const m = document.getElementById(`meta-${rid}`);
       if (m) m.textContent = `${f.length} merged pull request${f.length !== 1 ? 's' : ''}`;
       if (!f.length) {
         tb.innerHTML = `<tr><td colspan="${cs}" style="padding:0"><div class="empty">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
           <h3>No merged pull requests found</h3>
-          <p>Try adjusting the date range or search filter.</p>
+          <p>${S.jkOnly ? getWatch() + ' not involved in matching PRs' : 'Try adjusting the date range or search filter.'}</p>
         </div></td></tr>`;
         return;
       }
       tb.innerHTML = f.map(pr => {
+        const key = `${pr._rid}/${pr.number}`, inv = S.inv[key];
         const ma = new Date(pr.merged_at);
         const mergedAbs = ma.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
         const mergedRel = relT(pr.merged_at);
         const labs = (pr.labels || []).slice(0, 4).map(l => `<span class="plab" style="${labStyle(l.color || 'aaaaaa')}">${l.name.replace(/</g, '&lt;')}</span>`).join('');
+        const jb = inv?.role
+          ? `<span class="jbadge">${inv.role === 'author' ? '✍️' : inv.role === 'reviewer' ? '👁' : inv.role === 'mentioned' ? '🔔' : '💬'} ${inv.role}</span>`
+          : inv === undefined ? `<span class="skb sk" style="width:50px;height:12px;display:inline-block;margin-top:3px"></span>` : '';
         const rc = isAll ? `<td style="font-size:var(--xs);font-family:var(--fm);color:var(--txm);white-space:nowrap">${pr._rid}</td>` : '';
         return `<tr>
           <td class="pnum"><a href="${pr.html_url}" target="_blank" rel="noopener noreferrer">#${pr.number}</a></td>
           <td class="ptc">
             <a class="ptl" href="${pr.html_url}" target="_blank" rel="noopener noreferrer">${pr.title.replace(/</g, '&lt;')}</a>
-            ${labs ? `<div class="plabs">${labs}</div>` : ''}
+            ${labs ? `<div class="plabs">${labs}</div>` : ''}${jb}
           </td>${rc}
           <td class="pauth">
             <img src="${pr.user.avatar_url}&s=48" alt="" width="24" height="24" loading="lazy">
@@ -1243,6 +1264,18 @@
         S.closedPrs[rid] = [];
       }
       if (btn) { btn.disabled = false; btn.classList.remove('loading'); }
+      renderClosedTbl(rid, S.closedPrs[rid]);
+      // Fetch involvement for closed PRs
+      const full4c = r => REPOS.find(x => x.id === r).full;
+      await Promise.allSettled(S.closedPrs[rid].map(pr => {
+        const k = `${pr._rid}/${pr.number}`;
+        if (S.inv[k]) return Promise.resolve();
+        S.inv[k] = { loading: true, role: null };
+        return fetchInv(full4c(pr._rid), pr).then(inv => {
+          S.inv[k] = inv;
+          renderClosedTbl(rid, S.closedPrs[rid]);
+        });
+      }));
       renderClosedTbl(rid, S.closedPrs[rid]);
       // Refresh the stats row so the merged count chip appears
       if (rid === 'all') {
@@ -1331,14 +1364,19 @@
 
     async function fetchInv(repoFull, pr) {
       try {
-        if (pr.user.login.toLowerCase() === WATCH) return { role: 'author' };
-        if ((pr.requested_reviewers || []).some(r => r.login.toLowerCase() === WATCH)) return { role: 'reviewer' };
+        const w = getWatch();
+        if (pr.user.login.toLowerCase() === w) return { role: 'author' };
+        if ((pr.requested_reviewers || []).some(r => r.login.toLowerCase() === w)) return { role: 'reviewer' };
+        const mentionRe = new RegExp('@' + w + '\\b', 'i');
+        if (pr.body && mentionRe.test(pr.body)) return { role: 'mentioned' };
         const [rv, cm] = await Promise.allSettled([
           ghGet(`https://api.github.com/repos/${repoFull}/pulls/${pr.number}/reviews?per_page=100`),
           ghGet(`https://api.github.com/repos/${repoFull}/issues/${pr.number}/comments?per_page=100`)
         ]);
-        if (rv.status === 'fulfilled' && rv.value.some(r => r.user && r.user.login.toLowerCase() === WATCH)) return { role: 'reviewer' };
-        if (cm.status === 'fulfilled' && cm.value.some(c => c.user && c.user.login.toLowerCase() === WATCH)) return { role: 'commenter' };
+        if (rv.status === 'fulfilled' && rv.value.some(r => r.user && r.user.login.toLowerCase() === w)) return { role: 'reviewer' };
+        if (cm.status === 'fulfilled' && cm.value.some(c => c.user && c.user.login.toLowerCase() === w)) return { role: 'commenter' };
+        if (rv.status === 'fulfilled' && rv.value.some(r => r.body && mentionRe.test(r.body))) return { role: 'mentioned' };
+        if (cm.status === 'fulfilled' && cm.value.some(c => c.body && mentionRe.test(c.body))) return { role: 'mentioned' };
         return { role: null };
       } catch { return { role: null }; }
     }
@@ -1441,7 +1479,7 @@
         tb.innerHTML = `<tr><td colspan="${cs}" style="padding:0"><div class="empty">
       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
       <h3>No pull requests found</h3>
-      <p>${S.jkOnly ? 'jackal1-66 not involved in matching PRs' : 'Try adjusting your filters.'}</p>
+      <p>${S.jkOnly ? getWatch() + ' not involved in matching PRs' : 'Try adjusting your filters.'}</p>
     </div></td></tr>`;
         return;
       }
@@ -1449,7 +1487,7 @@
         const key = `${pr._rid}/${pr.number}`, checks = S.ci[key], inv = S.inv[key];
         const ciH = checks === undefined ? `<div class="ciload"><div class="cisp"></div></div>` : ciSummHtml(checks, key);
         const jb = inv?.role
-          ? `<span class="jbadge">${inv.role === 'author' ? '✍️' : inv.role === 'reviewer' ? '👁' : '💬'} ${inv.role}</span>`
+          ? `<span class="jbadge">${inv.role === 'author' ? '✍️' : inv.role === 'reviewer' ? '👁' : inv.role === 'mentioned' ? '🔔' : '💬'} ${inv.role}</span>`
           : inv === undefined ? `<span class="skb sk" style="width:50px;height:12px;display:inline-block;margin-top:3px"></span>` : '';
         const labs = (pr.labels || []).slice(0, 4).map(l => `<span class="plab" style="${labStyle(l.color || 'aaaaaa')}">${l.name.replace(/</g, '&lt;')}</span>`).join('');
         const rc = isAll ? `<td style="font-size:var(--xs);font-family:var(--fm);color:var(--txm);white-space:nowrap">${pr._rid}</td>` : '';
@@ -1487,7 +1525,7 @@
     ${errs ? `<div class="chip err">❌ ${errs} failing</div>` : ''}
     ${wrns ? `<div class="chip warn">⏳ ${wrns} pending</div>` : ''}
     ${noci ? `<div class="chip neu">⬜ ${noci} no CI</div>` : ''}
-    ${jkc ? `<div class="chip jk">👤 ${jkc} jackal1-66</div>` : ''}`;
+    ${jkc ? `<div class="chip jk">👤 ${jkc} ${getWatch()}</div>` : ''}`;
     }
 
     function renderTab() {
@@ -1519,7 +1557,7 @@
       const k = `${rid}/${num}`, row = document.querySelector(`tr[data-pr="${k}"]`); if (!row) return;
       const cell = row.querySelector('.ptc'); if (!cell) return;
       cell.querySelector('.jbadge')?.remove();
-      if (inv?.role) { const b = document.createElement('span'); b.className = 'jbadge'; b.textContent = `${inv.role === 'author' ? '✍️' : inv.role === 'reviewer' ? '👁' : '💬'} ${inv.role}`; cell.appendChild(b); }
+      if (inv?.role) { const b = document.createElement('span'); b.className = 'jbadge'; b.textContent = `${inv.role === 'author' ? '✍️' : inv.role === 'reviewer' ? '👁' : inv.role === 'mentioned' ? '🔔' : '💬'} ${inv.role}`; cell.appendChild(b); }
     }
 
     async function loadAll() {
@@ -1566,7 +1604,30 @@
     document.getElementById('rbtn').addEventListener('click', loadAll);
     document.getElementById('ghtok').addEventListener('input', () => { updTok(); clearTimeout(window._tt); window._tt = setTimeout(loadAll, 800); });
     setInterval(loadAll, 3 * 60 * 1000);
-    buildSections(); loadToken(); loadAll();
+    async function reloadInv() {
+      const full4 = rid => REPOS.find(x => x.id === rid).full;
+      const openPRs = REPOS.flatMap(r => (S.prs[r.id] || []).map(p => ({ ...p, _rid: r.id })));
+      const closedPRSet = new Map();
+      Object.values(S.closedPrs).filter(Boolean).flat().forEach(pr => {
+        const k = `${pr._rid}/${pr.number}`; if (!closedPRSet.has(k)) closedPRSet.set(k, pr);
+      });
+      const allPRs = [...openPRs, ...closedPRSet.values()];
+      S.inv = {};
+      renderTab();
+      await Promise.allSettled(allPRs.map(pr => {
+        const k = `${pr._rid}/${pr.number}`; S.inv[k] = { loading: true, role: null };
+        return fetchInv(full4(pr._rid), pr).then(inv => {
+          S.inv[k] = inv;
+          if (S.prs[pr._rid]) { patchJk(pr._rid, pr.number, inv); }
+          renderStats(pr._rid, S.prs[pr._rid]?.map(p => ({ ...p, _rid: pr._rid })) ?? null);
+          renderStats('all', REPOS.flatMap(r => (S.prs[r.id] || []).map(p => ({ ...p, _rid: r.id }))));
+        });
+      }));
+      renderTab();
+      Object.keys(S.closedPrs).filter(rid => S.closedPrs[rid]).forEach(rid => renderClosedTbl(rid, S.closedPrs[rid]));
+    }
+    buildSections(); loadToken(); loadWatch(); loadAll();
+    document.getElementById('ghwatch').addEventListener('input', () => { updWatch(); reloadInv(); });
   </script>
 </body>
 
