@@ -1007,10 +1007,11 @@
   </main>
 
   <script>
-    const REPOS = [
-      { id: 'O2DPG', full: 'AliceO2Group/O2DPG' },
-      { id: 'AliceO2', full: 'AliceO2Group/AliceO2' },
-      { id: 'alidist', full: 'alisw/alidist' },
+    let REPOS = [];
+    const DEFAULT_REPOS = [
+      { id: 'O2DPG',     full: 'AliceO2Group/O2DPG'    },
+      { id: 'AliceO2',   full: 'AliceO2Group/AliceO2'  },
+      { id: 'alidist',   full: 'alisw/alidist'          },
       { id: 'O2Physics', full: 'AliceO2Group/O2Physics' },
     ];
     const WATCH_DEFAULT = 'jackal1-66';
@@ -1626,8 +1627,17 @@
       renderTab();
       Object.keys(S.closedPrs).filter(rid => S.closedPrs[rid]).forEach(rid => renderClosedTbl(rid, S.closedPrs[rid]));
     }
-    buildSections(); loadToken(); loadWatch(); loadAll();
-    document.getElementById('ghwatch').addEventListener('input', () => { updWatch(); reloadInv(); });
+    (async function init() {
+      try {
+        const res = await fetch('repos.json');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        REPOS = await res.json();
+      } catch {
+        REPOS = DEFAULT_REPOS;
+      }
+      buildSections(); loadToken(); loadWatch(); loadAll();
+      document.getElementById('ghwatch').addEventListener('input', () => { updWatch(); reloadInv(); });
+    })();
   </script>
 </body>
 
