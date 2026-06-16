@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ALICE O2 Pull Request Dashboard</title>
+  <script src="repos.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Inter:wght@300..700&display=swap"
     rel="stylesheet">
@@ -948,18 +949,7 @@
       ALICE O2 · PR Monitor
     </a>
     <div class="hsp"></div>
-    <nav class="tabs" role="tablist">
-      <button class="tab active" role="tab" data-rid="O2DPG" aria-selected="true">O2DPG<span class="tcount"
-          id="cnt-O2DPG">–</span></button>
-      <button class="tab" role="tab" data-rid="AliceO2" aria-selected="false">AliceO2<span class="tcount"
-          id="cnt-AliceO2">–</span></button>
-      <button class="tab" role="tab" data-rid="alidist" aria-selected="false">alidist<span class="tcount"
-          id="cnt-alidist">–</span></button>
-      <button class="tab" role="tab" data-rid="O2Physics" aria-selected="false">O2Physics<span class="tcount"
-          id="cnt-O2Physics">–</span></button>
-      <button class="tab" role="tab" data-rid="all" aria-selected="false">All<span class="tcount"
-          id="cnt-all">–</span></button>
-    </nav>
+    <nav class="tabs" role="tablist" id="maintabs"></nav>
     <div class="hact">
       <button class="jktgl" id="jktgl" title="Show only PRs involving jackal1-66">
         <span class="jdot"></span><span id="jklabel">jackal1-66</span>
@@ -1007,18 +997,12 @@
   </main>
 
   <script>
-    let REPOS = [];
-    const DEFAULT_REPOS = [
-      { id: 'O2DPG',     full: 'AliceO2Group/O2DPG'    },
-      { id: 'AliceO2',   full: 'AliceO2Group/AliceO2'  },
-      { id: 'alidist',   full: 'alisw/alidist'          },
-      { id: 'O2Physics', full: 'AliceO2Group/O2Physics' },
-    ];
+    const REPOS = window.REPOS_CONFIG || [];
     const WATCH_DEFAULT = 'jackal1-66';
     function getWatch() { return (document.getElementById('ghwatch').value.trim() || WATCH_DEFAULT).toLowerCase(); }
     const S = {
       prs: Object.fromEntries(REPOS.map(r => [r.id, null])),
-      ci: {}, inv: {}, tab: 'O2DPG', expCI: new Set(), jkOnly: false,
+      ci: {}, inv: {}, tab: REPOS[0]?.id || '', expCI: new Set(), jkOnly: false,
       subTab: Object.fromEntries([...REPOS.map(r => r.id), 'all'].map(id => [id, 'open'])),
       closedPrs: Object.fromEntries([...REPOS.map(r => r.id), 'all'].map(id => [id, null])),
       closedSince: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
@@ -1063,14 +1047,17 @@
 
     // ── Build sections ────────────────────────
     function buildSections() {
-      document.getElementById('secroot').innerHTML = [...REPOS, { id: 'all', full: '' }].map(r => {
+      document.getElementById('maintabs').innerHTML =
+        REPOS.map((r, i) => `<button class="tab${i === 0 ? ' active' : ''}" role="tab" data-rid="${r.id}" aria-selected="${i === 0}">${r.id}<span class="tcount" id="cnt-${r.id}">–</span></button>`).join('') +
+        `<button class="tab" role="tab" data-rid="all" aria-selected="false">All<span class="tcount" id="cnt-all">–</span></button>`;
+      document.getElementById('secroot').innerHTML = [...REPOS, { id: 'all', full: '' }].map((r, i) => {
         const isAll = r.id === 'all', title = isAll ? 'All Repositories' : r.full;
         const ghLink = isAll ? '' :
           `<a class="rlink" href="https://github.com/${r.full}/pulls" target="_blank" rel="noopener noreferrer">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         Open on GitHub</a>`;
         const ec = isAll ? '<th style="width:110px">Repo</th>' : '';
-        return `<div id="sec-${r.id}" class="rsec${r.id === 'O2DPG' ? ' active' : ''}">
+        return `<div id="sec-${r.id}" class="rsec${i === 0 ? ' active' : ''}">
       <div class="shdr">
         <div><h${isAll ? '2' : '1'} class="stitle">${title}</h${isAll ? '2' : '1'}><div class="smeta" id="meta-${r.id}">Loading…</div></div>
         <div style="display:flex;align-items:center;gap:var(--s4);flex-wrap:wrap">
@@ -1596,12 +1583,14 @@
     }
 
     document.getElementById('jktgl').addEventListener('click', function () { S.jkOnly = !S.jkOnly; this.classList.toggle('active', S.jkOnly); renderTab(); });
-    document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+    document.getElementById('maintabs').addEventListener('click', e => {
+      const t = e.target.closest('.tab');
+      if (!t) return;
       document.querySelectorAll('.tab').forEach(x => { x.classList.remove('active'); x.setAttribute('aria-selected', 'false'); });
       t.classList.add('active'); t.setAttribute('aria-selected', 'true'); S.tab = t.dataset.rid;
       document.querySelectorAll('.rsec').forEach(s => s.classList.remove('active'));
       document.getElementById('sec-' + S.tab)?.classList.add('active'); renderTab();
-    }));
+    });
     document.getElementById('rbtn').addEventListener('click', loadAll);
     document.getElementById('ghtok').addEventListener('input', () => { updTok(); clearTimeout(window._tt); window._tt = setTimeout(loadAll, 800); });
     setInterval(loadAll, 3 * 60 * 1000);
@@ -1627,17 +1616,8 @@
       renderTab();
       Object.keys(S.closedPrs).filter(rid => S.closedPrs[rid]).forEach(rid => renderClosedTbl(rid, S.closedPrs[rid]));
     }
-    (async function init() {
-      try {
-        const res = await fetch('repos.json');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        REPOS = await res.json();
-      } catch {
-        REPOS = DEFAULT_REPOS;
-      }
-      buildSections(); loadToken(); loadWatch(); loadAll();
-      document.getElementById('ghwatch').addEventListener('input', () => { updWatch(); reloadInv(); });
-    })();
+    buildSections(); loadToken(); loadWatch(); loadAll();
+    document.getElementById('ghwatch').addEventListener('input', () => { updWatch(); reloadInv(); });
   </script>
 </body>
 
