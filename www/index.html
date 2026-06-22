@@ -931,6 +931,72 @@
         display: none
       }
     }
+
+    /* ── Tag Diff ──────────────────────────── */
+    .tdtag {
+      font-family: var(--fm);
+      font-size: 11px;
+      background: var(--surfoff);
+      padding: 1px 5px;
+      border-radius: 3px;
+      display: inline-block
+    }
+
+    .tdtag.old {
+      color: var(--err);
+      background: var(--errhi)
+    }
+
+    .tdtag.new {
+      color: var(--ok);
+      background: var(--okhi)
+    }
+
+    .tddeps {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      margin-top: var(--s2)
+    }
+
+    .tddep {
+      font-size: 10px;
+      font-family: var(--fm);
+      padding: 1px 5px;
+      border-radius: 3px;
+      border: 1px solid
+    }
+
+    .tddep.add {
+      color: var(--ok);
+      border-color: var(--ok);
+      background: var(--okhi)
+    }
+
+    .tddep.rem {
+      color: var(--err);
+      border-color: var(--err);
+      background: var(--errhi)
+    }
+
+    .tddep.unch {
+      color: var(--txf);
+      border-color: var(--border);
+      background: var(--surfoff)
+    }
+
+    .tdcomm-hdr {
+      flex-basis: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: var(--s2);
+      border-bottom: 1px solid var(--div);
+      margin-bottom: var(--s2);
+      font-size: var(--xs);
+      font-weight: 600;
+      color: var(--txm)
+    }
   </style>
 </head>
 
@@ -1049,7 +1115,8 @@
     function buildSections() {
       document.getElementById('maintabs').innerHTML =
         REPOS.map((r, i) => `<button class="tab${i === 0 ? ' active' : ''}" role="tab" data-rid="${r.id}" aria-selected="${i === 0}">${r.id}<span class="tcount" id="cnt-${r.id}">–</span></button>`).join('') +
-        `<button class="tab" role="tab" data-rid="all" aria-selected="false">All<span class="tcount" id="cnt-all">–</span></button>`;
+        `<button class="tab" role="tab" data-rid="all" aria-selected="false">All<span class="tcount" id="cnt-all">–</span></button>` +
+        `<button class="tab" role="tab" data-rid="tagdiff" aria-selected="false"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px;margin-right:3px"><polyline points="16,3 21,3 21,8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21,16 21,21 16,21"/><line x1="4" y1="4" x2="21" y2="21"/></svg>Tag Diff</button>`;
       document.getElementById('secroot').innerHTML = [...REPOS, { id: 'all', full: '' }].map((r, i) => {
         const isAll = r.id === 'all', title = isAll ? 'All Repositories' : r.full;
         const ghLink = isAll ? '' :
@@ -1117,6 +1184,55 @@
       </div>
     </div>`;
       }).join('');
+      document.getElementById('secroot').innerHTML += `<div id="sec-tagdiff" class="rsec">
+  <div class="shdr">
+    <div>
+      <h1 class="stitle">Tag Diff</h1>
+      <div class="smeta" id="meta-tagdiff">Compare VO_ALICE@O2PDPSuite daily tags</div>
+    </div>
+  </div>
+  <div class="tbar">
+    <label for="td-from">From date</label>
+    <input class="tinput" type="date" id="td-from" style="max-width:160px">
+    <label for="td-to">To date</label>
+    <input class="tinput" type="date" id="td-to" style="max-width:160px">
+    <button class="rbtn" id="td-compare-btn">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16,3 21,3 21,8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21,16 21,21 16,21"/><line x1="4" y1="4" x2="21" y2="21"/></svg>
+      Compare
+    </button>
+    <div class="thint" style="flex-basis:100%">
+      Diffs <code>alidist</code> package recipes between two daily tags. Each changed package shows its old &amp; new version, dependency changes, and expandable commit list between versions — useful for pinpointing regressions.
+    </div>
+    <div style="flex-basis:100%;border-top:1px solid var(--div);padding-top:var(--s3);display:flex;flex-direction:column;gap:var(--s3)">
+      <div style="display:flex;align-items:center;gap:var(--s2);flex-wrap:wrap">
+        <label for="td-repo-sel" style="font-size:var(--xs);font-weight:600;color:var(--txm);white-space:nowrap">Repository</label>
+        <select class="tinput" id="td-repo-sel" style="flex:none;min-width:0;max-width:230px"></select>
+        <input class="tinput" type="text" id="td-repo-custom" placeholder="owner/repo" style="flex:none;min-width:0;max-width:200px;display:none;font-family:var(--fm)">
+        <button class="rbtn" id="td-load-tags-btn">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+          Load tags
+        </button>
+        <span id="td-tags-status" class="tsts miss"></span>
+      </div>
+      <div style="display:flex;gap:var(--s3);align-items:flex-start">
+        <div style="flex:1;min-width:200px">
+          <label for="td-from-tag" style="font-size:var(--xs);font-weight:600;color:var(--txm);display:block;margin-bottom:var(--s1)">From tag</label>
+          <input class="tinput" type="text" id="td-from-tag" list="td-from-datalist" placeholder="auto" style="width:100%;flex:none;min-width:0;font-family:var(--fm)">
+          <datalist id="td-from-datalist"></datalist>
+          <div id="td-from-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:var(--s2)"></div>
+        </div>
+        <div style="flex:1;min-width:200px">
+          <label for="td-to-tag" style="font-size:var(--xs);font-weight:600;color:var(--txm);display:block;margin-bottom:var(--s1)">To tag</label>
+          <input class="tinput" type="text" id="td-to-tag" list="td-to-datalist" placeholder="auto" style="width:100%;flex:none;min-width:0;font-family:var(--fm)">
+          <datalist id="td-to-datalist"></datalist>
+          <div id="td-to-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:var(--s2)"></div>
+        </div>
+      </div>
+      <div class="thint" style="margin-top:0">Use <strong>Load tags</strong> to fetch real tags for the selected date range (e.g. <code>O2PDPSuite-daily-20260621-0000</code>) and click one to select it. You can also type a tag name manually.</div>
+    </div>
+  </div>
+  <div id="td-result"></div>
+</div>`;
       document.querySelectorAll('[data-fi]').forEach(el => el.addEventListener('input', renderTab));
       document.querySelectorAll('[data-fci]').forEach(el => el.addEventListener('change', renderTab));
       document.querySelectorAll('[data-fi-closed]').forEach(el => el.addEventListener('input', () => renderClosedTbl(el.dataset.fiClosed, S.closedPrs[el.dataset.fiClosed])));
@@ -1618,6 +1734,514 @@
     }
     buildSections(); loadToken(); loadWatch(); loadAll();
     document.getElementById('ghwatch').addEventListener('input', () => { updWatch(); reloadInv(); });
+
+    // ── Tag Diff ──────────────────────────────────────────────────────────────
+    const TD = { pkgData: {}, loading: false };
+
+    function tdExtractGHRepo(src) {
+      if (!src) return null;
+      const m = src.match(/github\.com[:/]([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?(?:\s|$)/);
+      return m ? m[1] : null;
+    }
+
+    function tdParsePatch(patch) {
+      if (!patch) return {};
+      const result = {};
+      ['package', 'version', 'tag', 'source'].forEach(f => {
+        const a = patch.match(new RegExp('^\\+' + f + ':\\s*["\']?(.+?)["\']?\\s*$', 'm'));
+        const d = patch.match(new RegExp('^-' + f + ':\\s*["\']?(.+?)["\']?\\s*$', 'm'));
+        if (a || d) result[f] = { old: d ? d[1].trim() : null, new: a ? a[1].trim() : null };
+      });
+      return result;
+    }
+
+    function tdParseRequires(patch) {
+      if (!patch) return { added: [], removed: [], unchanged: [] };
+      const lines = patch.split('\n');
+      let inReq = false;
+      const added = [], removed = [], unchanged = [];
+      lines.forEach(line => {
+        const plain = line.replace(/^[+ -]/, '');
+        if (/^[+ -]?requires\s*:/.test(line)) { inReq = true; return; }
+        if (/^[+ -]?[a-zA-Z_]\w*\s*:/.test(line) && !/^\s/.test(plain)) { inReq = false; return; }
+        if (!inReq) return;
+        const dep = line.match(/^([+ -])\s+[-*]\s+(.+)/);
+        if (!dep) return;
+        const name = dep[2].trim().split(/\s/)[0];
+        if (dep[1] === '+') added.push(name);
+        else if (dep[1] === '-') removed.push(name);
+        else unchanged.push(name);
+      });
+      return { added, removed, unchanged };
+    }
+
+    async function tdRunCompare() {
+      if (TD.loading) return;
+      const fromVal = document.getElementById('td-from').value;
+      const toVal = document.getElementById('td-to').value;
+      const repo = tdGetRepo();
+      const fromTag = (document.getElementById('td-from-tag').value || '').trim();
+      const toTag   = (document.getElementById('td-to-tag').value || '').trim();
+
+      if (!fromTag || !toTag) {
+        document.getElementById('td-result').innerHTML =
+          `<div class="errbn">Select a From tag and a To tag — use <strong>Load tags</strong> to fetch available tags for the date range, then click a chip to select it.</div>`;
+        return;
+      }
+
+      TD.loading = true;
+      const btn = document.getElementById('td-compare-btn');
+      btn.disabled = true; btn.classList.add('loading');
+      document.getElementById('meta-tagdiff').textContent = fromTag + ' → ' + toTag;
+      document.getElementById('td-result').innerHTML =
+        `<div style="display:flex;align-items:center;gap:var(--s3);padding:var(--s12) var(--s4);color:var(--txm)">
+          <div class="cisp" style="width:20px;height:20px;flex-shrink:0"></div>
+          Comparing <strong style="font-family:var(--fm)">${fromTag}</strong>&thinsp;→&thinsp;<strong style="font-family:var(--fm)">${toTag}</strong>…
+        </div>`;
+
+      try {
+        const cmp = await ghGet(
+          `https://api.github.com/repos/${repo}/compare/${encodeURIComponent(fromTag)}...${encodeURIComponent(toTag)}`
+        );
+        const files = (cmp.files || []).filter(f => f.filename.endsWith('.sh') && !f.filename.includes('/'));
+        TD.ctx = { fromTag, toTag, repo };
+        TD.pkgData = {};
+        files.forEach((f, i) => {
+          const ch = tdParsePatch(f.patch || '');
+          const req = tdParseRequires(f.patch || '');
+          const pkgName = ch.package?.new || ch.package?.old || f.filename.replace(/\.sh$/, '');
+          const oldTag = ch.tag?.old || ch.version?.old || null;
+          const newTag = ch.tag?.new || ch.version?.new || null;
+          const srcRaw = ch.source?.new || ch.source?.old || '';
+          TD.pkgData[i] = { i, filename: f.filename, pkgName, status: f.status, oldTag, newTag, srcRaw, ghRepo: tdExtractGHRepo(srcRaw), req };
+        });
+        tdRenderResult({ fromTag, toTag, repo, aheadBy: cmp.ahead_by, packages: Object.values(TD.pkgData) });
+      } catch (e) {
+        document.getElementById('td-result').innerHTML =
+          `<div class="errbn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+           <span>${e.message.replace(/</g, '&lt;')} — verify both tags exist in <code>${repo}</code> and your token has access.</span></div>`;
+      }
+
+      TD.loading = false;
+      btn.disabled = false; btn.classList.remove('loading');
+    }
+
+    function tdRenderResult({ fromTag, toTag, repo, aheadBy, packages }) {
+      const added = packages.filter(p => p.status === 'added').length;
+      const removed = packages.filter(p => p.status === 'removed').length;
+      const changed = packages.filter(p => p.status === 'modified' || p.status === 'renamed').length;
+
+      const ghCompareLink = `https://github.com/${repo}/compare/${encodeURIComponent(fromTag)}...${encodeURIComponent(toTag)}`;
+
+      const summary = `<div class="srow" style="margin-bottom:var(--s4)">
+        <div class="chip neu">${packages.length} package${packages.length !== 1 ? 's' : ''} affected</div>
+        ${changed ? `<div class="chip warn">✏️ ${changed} changed</div>` : ''}
+        ${added ? `<div class="chip ok">➕ ${added} added</div>` : ''}
+        ${removed ? `<div class="chip err">➖ ${removed} removed</div>` : ''}
+        ${aheadBy ? `<div class="chip jk">↑ ${aheadBy} recipe commit${aheadBy !== 1 ? 's' : ''}</div>` : ''}
+        <a class="rlink" href="${ghCompareLink}" target="_blank" rel="noopener noreferrer" style="margin-left:auto">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          Full diff on GitHub
+        </a>
+      </div>`;
+
+      if (!packages.length) {
+        document.getElementById('td-result').innerHTML = summary + `<div class="twrap"><div class="empty">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+          <h3>No package changes</h3><p>No recipe files differ between the two tags.</p>
+        </div></div>`;
+        return;
+      }
+
+      const rows = packages.map(p => {
+        const statusBadge = p.status === 'added'
+          ? `<span class="chip ok" style="font-size:10px;padding:1px 6px">added</span>`
+          : p.status === 'removed'
+          ? `<span class="chip err" style="font-size:10px;padding:1px 6px">removed</span>`
+          : `<span class="chip warn" style="font-size:10px;padding:1px 6px">changed</span>`;
+
+        const oldHtml = p.oldTag
+          ? `<span class="tdtag old">${p.oldTag.replace(/</g,'&lt;')}</span>`
+          : `<span style="color:var(--txf)">—</span>`;
+        const newHtml = p.newTag
+          ? `<span class="tdtag new">${p.newTag.replace(/</g,'&lt;')}</span>`
+          : `<span style="color:var(--txf)">—</span>`;
+
+        const ghDiff = (p.ghRepo && p.oldTag && p.newTag)
+          ? `<a class="rlink" href="https://github.com/${p.ghRepo}/compare/${encodeURIComponent(p.oldTag)}...${encodeURIComponent(p.newTag)}" target="_blank" rel="noopener noreferrer" style="font-size:10px;margin-left:var(--s2)">diff ↗</a>`
+          : '';
+
+        const reqParts = [];
+        (p.req.added || []).forEach(d => reqParts.push(`<span class="tddep add">+${d}</span>`));
+        (p.req.removed || []).forEach(d => reqParts.push(`<span class="tddep rem">-${d}</span>`));
+        (p.req.unchanged || []).slice(0, 6).forEach(d => reqParts.push(`<span class="tddep unch">${d}</span>`));
+        const reqHtml = reqParts.length
+          ? `<div class="tddeps">${reqParts.join('')}${(p.req.unchanged || []).length > 6 ? `<span class="tddep unch">+${p.req.unchanged.length - 6} more</span>` : ''}</div>`
+          : '';
+
+        const canLoad = p.oldTag && p.newTag && p.status !== 'removed';
+        const commitsCell = canLoad
+          ? `<button class="cisumm neu" onclick="tdToggleCommits(${p.i})" id="td-cbtn-${p.i}" style="font-size:var(--xs)">Commits <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6,9 12,15 18,9"/></svg></button>`
+          : '<span style="color:var(--txf);font-size:var(--xs)">—</span>';
+
+        const srcLink = p.ghRepo
+          ? `<a class="rlink" href="https://github.com/${p.ghRepo}" target="_blank" rel="noopener noreferrer" style="font-size:10px;margin-top:2px">${p.ghRepo}</a>`
+          : '';
+
+        return `<tr data-tdi="${p.i}">
+          <td>
+            <strong style="font-size:var(--sm)">${p.pkgName.replace(/</g,'&lt;')}</strong>
+            <div style="font-size:10px;font-family:var(--fm);color:var(--txf);margin-top:1px">${p.filename}</div>
+            ${srcLink}
+            ${reqHtml}
+          </td>
+          <td style="vertical-align:top;padding-top:var(--s4)">${oldHtml}</td>
+          <td style="vertical-align:top;padding-top:var(--s4)">${newHtml}${ghDiff}</td>
+          <td style="vertical-align:top;padding-top:var(--s4)">${statusBadge}</td>
+          <td style="vertical-align:top;padding-top:calc(var(--s4) - 2px)">${commitsCell}</td>
+        </tr>`;
+      }).join('');
+
+      document.getElementById('td-result').innerHTML = summary + `<div class="twrap">
+        <table class="ptbl">
+          <thead><tr>
+            <th>Package / Dependencies</th>
+            <th style="width:160px">Old Tag · Version</th>
+            <th style="width:160px">New Tag · Version</th>
+            <th style="width:90px">Status</th>
+            <th style="width:160px">Commits</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    }
+
+    async function tdFetchRecipeSource(repo, filename, tagRef) {
+      try {
+        const resp = await fetch(
+          `https://api.github.com/repos/${repo}/contents/${encodeURIComponent(filename)}?ref=${encodeURIComponent(tagRef)}`,
+          { headers: ghH() }
+        );
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        const content = atob(data.content.replace(/\n/g, ''));
+        const m = content.match(/^source:\s*(.+)$/m);
+        return m ? m[1].trim().replace(/^["']|["']$/g, '') : null;
+      } catch { return null; }
+    }
+
+    function tdLinkPRs(escapedMsg, ghRepo) {
+      return escapedMsg.replace(/#(\d+)/g,
+        (_, num) => `<a href="https://github.com/${ghRepo}/pull/${num}" target="_blank" rel="noopener noreferrer" style="color:var(--pr);font-weight:600">#${num}</a>`
+      );
+    }
+
+    window.tdToggleCommits = async function(idx) {
+      const p = TD.pkgData[idx];
+      if (!p) return;
+
+      const existingRow = document.getElementById('td-crows-' + idx);
+      if (existingRow) {
+        existingRow.remove();
+        const btn = document.getElementById('td-cbtn-' + idx);
+        if (btn) btn.innerHTML = `Commits <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6,9 12,15 18,9"/></svg>`;
+        return;
+      }
+
+      const parentRow = document.querySelector('tr[data-tdi="' + idx + '"]');
+      if (!parentRow) return;
+
+      const btn = document.getElementById('td-cbtn-' + idx);
+      if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+
+      const detailRow = document.createElement('tr');
+      detailRow.id = 'td-crows-' + idx;
+      detailRow.className = 'cdr';
+
+      try {
+        // Resolve ghRepo lazily by fetching the recipe if not already known from the diff
+        if (!p.ghRepo) {
+          const { repo, toTag } = TD.ctx || {};
+          if (repo && toTag) {
+            const src = await tdFetchRecipeSource(repo, p.filename, toTag);
+            if (src) { p.srcRaw = src; p.ghRepo = tdExtractGHRepo(src); }
+          }
+        }
+
+        if (!p.ghRepo) {
+          const recipeUrl = TD.ctx?.repo
+            ? `https://github.com/${TD.ctx.repo}/blob/${encodeURIComponent(TD.ctx.toTag || '')}/${p.filename}`
+            : '#';
+          detailRow.innerHTML = `<td colspan="5"><div class="cdinn">
+            <span style="color:var(--txf);font-size:var(--xs)">
+              Could not determine source repository for <strong>${p.pkgName}</strong>.
+              <a class="rlink" href="${recipeUrl}" target="_blank" rel="noopener noreferrer" style="margin-left:var(--s2)">View recipe on GitHub ↗</a>
+            </span>
+          </div></td>`;
+          parentRow.after(detailRow);
+          if (btn) { btn.disabled = false; btn.innerHTML = `Commits <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6,9 12,15 18,9"/></svg>`; }
+          return;
+        }
+
+        // Update the source link in the package row now that we know it
+        const srcCell = parentRow.querySelector('td:first-child');
+        if (srcCell && !srcCell.querySelector('a.rlink')) {
+          const lnk = document.createElement('a');
+          lnk.className = 'rlink'; lnk.href = `https://github.com/${p.ghRepo}`;
+          lnk.target = '_blank'; lnk.rel = 'noopener noreferrer';
+          lnk.style.cssText = 'font-size:10px;margin-top:2px;display:block';
+          lnk.textContent = p.ghRepo;
+          srcCell.appendChild(lnk);
+        }
+
+        const cmpUrl = `https://api.github.com/repos/${p.ghRepo}/compare/${encodeURIComponent(p.oldTag)}...${encodeURIComponent(p.newTag)}`;
+        const cmp = await ghGet(cmpUrl);
+        const commits = (cmp.commits || []).slice().reverse();
+        const ghCompUrl = `https://github.com/${p.ghRepo}/compare/${encodeURIComponent(p.oldTag)}...${encodeURIComponent(p.newTag)}`;
+        const ghLink = `<a class="rlink" href="${ghCompUrl}" target="_blank" rel="noopener noreferrer">Full diff on GitHub ↗</a>`;
+
+        if (!commits.length) {
+          detailRow.innerHTML = `<td colspan="5"><div class="cdinn">
+            <div class="tdcomm-hdr"><span>${p.pkgName} — ${p.ghRepo}</span>${ghLink}</div>
+            <span style="color:var(--txf);font-size:var(--xs)">No commits found between <code>${p.oldTag}</code> and <code>${p.newTag}</code>.</span>
+          </div></td>`;
+        } else {
+          const items = commits.map(c => {
+            const rawMsg = (c.commit.message.split('\n')[0] || '').slice(0, 160);
+            const escapedMsg = rawMsg.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const linkedMsg = tdLinkPRs(escapedMsg, p.ghRepo);
+            const sha = c.sha.slice(0, 7);
+            const author = (c.commit.author?.name || c.author?.login || '').replace(/</g, '&lt;');
+            const when = c.commit.author?.date ? relT(c.commit.author.date) : '';
+            // Detect merge commits to highlight them
+            const isMerge = /^Merge pull request/i.test(rawMsg);
+            return `<div class="cdi" style="max-width:640px;min-width:260px${isMerge ? ';border-color:var(--prhi)' : ''}">
+              <a class="cdl" href="${c.html_url}" target="_blank" rel="noopener noreferrer" style="font-family:var(--fm);font-size:11px;flex-shrink:0;min-width:46px">${sha}</a>
+              <span class="cdn" title="${rawMsg.replace(/"/g,"'")}">${linkedMsg}</span>
+              ${author ? `<span class="cdt" style="flex-shrink:0">${author}</span>` : ''}
+              ${when ? `<span class="cdt" style="flex-shrink:0">${when}</span>` : ''}
+            </div>`;
+          }).join('');
+          const mergeCount = commits.filter(c => /^Merge pull request/i.test(c.commit.message)).length;
+          const prNote = mergeCount ? ` · ${mergeCount} PR merge${mergeCount !== 1 ? 's' : ''} (highlighted)` : '';
+          detailRow.innerHTML = `<td colspan="5"><div class="cdinn" style="flex-wrap:wrap">
+            <div class="tdcomm-hdr">
+              <span>${p.pkgName} — ${commits.length} commit${commits.length !== 1 ? 's' : ''}${prNote}</span>
+              ${ghLink}
+            </div>
+            ${items}
+          </div></td>`;
+        }
+      } catch (e) {
+        detailRow.innerHTML = `<td colspan="5"><div class="cdinn"><span style="color:var(--err);font-size:var(--xs)">Error: ${e.message.replace(/</g, '&lt;')}</span></div></td>`;
+      }
+
+      parentRow.after(detailRow);
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `Hide <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="18,15 12,9 6,15"/></svg>`;
+      }
+    };
+
+    // ── Tag Diff: tag picker & init ─────────────────────────────────────────
+    TD.tags = [];      // all fetched tags
+    TD.tagsRepo = '';  // repo those tags came from
+
+    function tdChipBtn(tag, which) {
+      const safeTag = tag.replace(/"/g, '&quot;');
+      return `<button onclick="tdPickTag('${which}','${safeTag}',this)"
+        style="font-family:var(--fm);font-size:10px;padding:2px 7px;border-radius:3px;border:1px solid var(--border);background:var(--surfoff);color:var(--tx);cursor:pointer;transition:all var(--tr)"
+        title="${safeTag}">${tag}</button>`;
+    }
+    window.tdPickTag = function(which, tag, btn) {
+      document.getElementById('td-' + which + '-tag').value = tag;
+      const container = btn.closest('#td-' + which + '-chips, [id^="td-"][id$="-chips"]') || btn.parentNode;
+      container.querySelectorAll('button').forEach(b => {
+        b.style.background = 'var(--surfoff)';
+        b.style.borderColor = 'var(--border)';
+        b.style.color = 'var(--tx)';
+      });
+      btn.style.background = 'var(--prhi)';
+      btn.style.borderColor = 'var(--pr)';
+      btn.style.color = 'var(--pr)';
+    };
+
+    function tdUpdateChips(which) {
+      const dateVal = document.getElementById('td-' + which)?.value || '';
+      const container = document.getElementById('td-' + which + '-chips');
+      if (!container) return;
+
+      // Always populate datalist with every loaded tag for autocomplete
+      const dl = document.getElementById('td-' + which + '-datalist');
+      if (dl) dl.innerHTML = TD.tags.map(t => `<option value="${t.name}">`).join('');
+
+      if (!TD.tags.length) { container.innerHTML = ''; return; }
+
+      // Try to narrow to the specific date first
+      const d = dateVal.replace(/-/g, '');
+      const matches = d ? TD.tags.filter(t => tdTagEmbeddedDate(t.name) === d) : [];
+      const show = matches.length ? matches : TD.tags; // fall back to full range
+      const note = (!matches.length && TD.tags.length)
+        ? `<span style="font-size:10px;color:var(--txf);flex-basis:100%;margin-bottom:2px">No exact match for ${dateVal} — all tags in selected range:</span>`
+        : '';
+
+      container.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">${note}${show.map(t => tdChipBtn(t.name, which)).join('')}</div>`;
+    }
+
+    function tdTagEmbeddedDate(tagName) {
+      const m = tagName.match(/(\d{8})/);
+      return m ? m[1] : null; // e.g. '20260620'
+    }
+
+    function tdGetRepo() {
+      const sel = document.getElementById('td-repo-sel');
+      if (!sel || sel.value === '__custom__') {
+        return (document.getElementById('td-repo-custom')?.value || '').trim() || 'alisw/alidist';
+      }
+      return sel.value || 'alisw/alidist';
+    }
+
+    // Known ALICE O2 tag group patterns for alisw/alidist repositories.
+    // Each entry is a prefix that, combined with a year suffix, targets one build category.
+    // matching-refs returns all tags for that prefix instantly (API ignores per_page).
+    const TD_TAG_PATTERNS = [
+      'O2PDPSuite-daily-',
+      'O2PDPSuite-nightly-',
+      'O2PDPSuite-gpu-nightly-',
+      'O2PDPSuite-epn-',
+      'O2PDPSuite-async-',
+      'O2PDPSuite-dataflow-',
+      'O2PDPSuite-slc-',
+      'O2Physics-daily-',
+      'O2Physics-nightly-',
+      'O2Physics-sim-',
+      'O2Suite-daily-',
+      'O2-daily-',
+      'O2-nightly-',
+    ];
+
+    async function tdLoadTags() {
+      const repo     = tdGetRepo();
+      const fromDate = (document.getElementById('td-from')?.value || '').replace(/-/g, '');
+      const toDate   = (document.getElementById('td-to')?.value   || '').replace(/-/g, '');
+
+      const btn = document.getElementById('td-load-tags-btn');
+      const status = document.getElementById('td-tags-status');
+      if (btn) { btn.disabled = true; btn.classList.add('loading'); }
+      if (status) { status.textContent = '● loading…'; status.className = 'tsts miss'; }
+
+      try {
+        const fromYear = fromDate ? fromDate.slice(0, 4) : new Date().getFullYear().toString();
+        const toYear   = toDate   ? toDate.slice(0, 4)   : new Date().getFullYear().toString();
+        const years    = [...new Set([fromYear, toYear].filter(Boolean))];
+
+        const isAlidist = /alidist/i.test(repo);
+
+        const seen = new Set();
+        const inRange = [];
+
+        if (isAlidist) {
+          // For alidist repos: fire all pattern×year combinations in parallel.
+          // Each matching-refs call returns only tags for that specific build category,
+          // avoiding the 2.5 MB cost of fetching all 6000+ O2 tags at once.
+          const tasks = [];
+          for (const year of years) {
+            for (const pattern of TD_TAG_PATTERNS) {
+              const url = `https://api.github.com/repos/${repo}/git/matching-refs/tags/${encodeURIComponent(pattern + year)}`;
+              tasks.push(ghGet(url).catch(() => []));
+            }
+          }
+          const results = await Promise.all(tasks);
+          for (const batch of results) {
+            for (const ref of (Array.isArray(batch) ? batch : [])) {
+              const tagName = ref.ref.replace('refs/tags/', '');
+              if (seen.has(tagName)) continue;
+              seen.add(tagName);
+              const d = tdTagEmbeddedDate(tagName);
+              if (!d) continue;
+              if ((!toDate || d <= toDate) && (!fromDate || d >= fromDate)) {
+                inRange.push({ name: tagName });
+              }
+            }
+          }
+        } else {
+          // Generic repos: paginate /tags and filter by embedded date in name.
+          for (let page = 1; page <= 20; page++) {
+            const batch = await ghGet(`https://api.github.com/repos/${repo}/tags?per_page=100&page=${page}`).catch(() => []);
+            if (!Array.isArray(batch) || !batch.length) break;
+            for (const tag of batch) {
+              if (seen.has(tag.name)) continue;
+              seen.add(tag.name);
+              const d = tdTagEmbeddedDate(tag.name);
+              if (!d) continue;
+              if ((!toDate || d <= toDate) && (!fromDate || d >= fromDate)) {
+                inRange.push({ name: tag.name });
+              }
+            }
+            if (batch.length < 100) break;
+          }
+        }
+
+        TD.tags = inRange.sort((a, b) => b.name.localeCompare(a.name));
+        TD.tagsRepo = repo;
+
+        const label = TD.tags.length
+          ? `● ${TD.tags.length} tag${TD.tags.length !== 1 ? 's' : ''} found`
+          : `● no tags found — check prefix "${prefix}" and date range`;
+        if (status) { status.textContent = label; status.className = TD.tags.length ? 'tsts ok' : 'tsts miss'; }
+
+        tdUpdateChips('from');
+        tdUpdateChips('to');
+      } catch (e) {
+        if (status) { status.textContent = '● ' + e.message.slice(0, 60); status.className = 'tsts miss'; }
+      }
+
+      if (btn) { btn.disabled = false; btn.classList.remove('loading'); }
+    }
+
+    // Init defaults
+    (function () {
+      const today = new Date();
+      const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+      const fmt = d => d.toISOString().slice(0, 10);
+      const f = document.getElementById('td-from'), t = document.getElementById('td-to');
+      if (f) f.value = fmt(yesterday);
+      if (t) t.value = fmt(today);
+      const ft = document.getElementById('td-from-tag'), tt = document.getElementById('td-to-tag');
+      if (ft) ft.placeholder = 'Select via chips or type tag name';
+      if (tt) tt.placeholder = 'Select via chips or type tag name';
+
+      // Populate repository select from REPOS_CONFIG (repos.js)
+      const sel = document.getElementById('td-repo-sel');
+      const customInput = document.getElementById('td-repo-custom');
+      if (sel && typeof REPOS_CONFIG !== 'undefined') {
+        const repos = [
+          { id: 'alidist', full: 'alisw/alidist' },
+          ...REPOS_CONFIG.filter(r => r.full !== 'alisw/alidist')
+        ];
+        repos.forEach(r => {
+          const opt = document.createElement('option');
+          opt.value = r.full;
+          opt.textContent = r.id + ' (' + r.full + ')';
+          sel.appendChild(opt);
+        });
+        const customOpt = document.createElement('option');
+        customOpt.value = '__custom__';
+        customOpt.textContent = 'Other…';
+        sel.appendChild(customOpt);
+
+        sel.addEventListener('change', function () {
+          const isCustom = this.value === '__custom__';
+          if (customInput) customInput.style.display = isCustom ? '' : 'none';
+        });
+      }
+
+      document.getElementById('td-compare-btn')?.addEventListener('click', tdRunCompare);
+      document.getElementById('td-load-tags-btn')?.addEventListener('click', tdLoadTags);
+
+      document.getElementById('td-from')?.addEventListener('change', () => tdUpdateChips('from'));
+      document.getElementById('td-to')?.addEventListener('change', () => tdUpdateChips('to'));
+    })();
   </script>
 </body>
 
