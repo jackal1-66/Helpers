@@ -998,6 +998,33 @@
       color: var(--txm)
     }
 
+    .tdpatch {
+      flex-basis: 100%;
+      font-family: var(--fm);
+      font-size: 11px;
+      line-height: 1.5;
+      overflow-x: auto;
+      border-radius: var(--r-sm);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      padding: var(--s2) 0;
+      white-space: pre
+    }
+
+    .tdpl { padding: 0 var(--s3); display: block; color: var(--txm) }
+    .tdpl.add { background: var(--okhi); color: var(--ok) }
+    .tdpl.rem { background: var(--errhi); color: var(--err) }
+    .tdpl.ctx { background: var(--prhi); color: var(--pr); font-style: italic }
+    .tdpl.hdr { color: var(--txf) }
+
+    .tdintertags {
+      flex-basis: 100%;
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--s1);
+      margin-top: var(--s2)
+    }
+
     /* ── AliMonitor Jobs ──────────────────── */
     .jbprog { display:flex; height:6px; border-radius:var(--r-full); overflow:hidden; background:var(--surfoff); min-width:100px }
     .jbprog .jbdone { background:var(--ok) }
@@ -1825,6 +1852,11 @@
         const d = patch.match(new RegExp('^-' + f + ':\\s*["\']?(.+?)["\']?\\s*$', 'm'));
         if (a || d) result[f] = { old: d ? d[1].trim() : null, new: a ? a[1].trim() : null };
       });
+      // source: may be an unchanged context line — still extract it so ghRepo can be resolved
+      if (!result.source) {
+        const ctx = patch.match(/^ source:\s*["\']?(.+?)["\']?\s*$/m);
+        if (ctx) result.source = { old: ctx[1].trim(), new: ctx[1].trim() };
+      }
       return result;
     }
 
@@ -1886,7 +1918,7 @@
           const oldTag = ch.tag?.old || ch.version?.old || null;
           const newTag = ch.tag?.new || ch.version?.new || null;
           const srcRaw = ch.source?.new || ch.source?.old || '';
-          TD.pkgData[i] = { i, filename: f.filename, pkgName, status: f.status, oldTag, newTag, srcRaw, ghRepo: tdExtractGHRepo(srcRaw), req };
+          TD.pkgData[i] = { i, filename: f.filename, pkgName, status: f.status, oldTag, newTag, srcRaw, ghRepo: tdExtractGHRepo(srcRaw), req, patch: f.patch || '' };
         });
         tdRenderResult({ fromTag, toTag, repo, aheadBy: cmp.ahead_by, packages: Object.values(TD.pkgData) });
       } catch (e) {
@@ -1953,7 +1985,8 @@
           : '';
 
         const canLoad = p.oldTag && p.newTag && p.status !== 'removed';
-        const commitsCell = canLoad
+        const canExpand = p.patch || canLoad;
+        const commitsCell = canExpand
           ? `<button class="cisumm neu" onclick="tdToggleCommits(${p.i})" id="td-cbtn-${p.i}" style="font-size:var(--xs)">Commits <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6,9 12,15 18,9"/></svg></button>`
           : '<span style="color:var(--txf);font-size:var(--xs)">—</span>';
 
@@ -2032,7 +2065,28 @@
       detailRow.className = 'cdr';
 
       try {
-        // Resolve ghRepo lazily by fetching the recipe if not already known from the diff
+        // ── 1. Recipe .sh diff ──────────────────────────────────────────────
+        let patchHtml = '';
+        if (p.patch) {
+          const alidistLink = TD.ctx?.repo
+            ? `https://github.com/${TD.ctx.repo}/blob/${encodeURIComponent(TD.ctx.toTag || '')}/${p.filename}`
+            : '#';
+          const rendered = p.patch.split('\n').map(line => {
+            const esc = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            if (line.startsWith('+++') || line.startsWith('---')) return `<span class="tdpl hdr">${esc}\n</span>`;
+            if (line.startsWith('@@')) return `<span class="tdpl ctx">${esc}\n</span>`;
+            if (line.startsWith('+')) return `<span class="tdpl add">${esc}\n</span>`;
+            if (line.startsWith('-')) return `<span class="tdpl rem">${esc}\n</span>`;
+            return `<span class="tdpl">${esc}\n</span>`;
+          }).join('');
+          patchHtml = `<div class="tdcomm-hdr">
+            <span>${p.filename.replace(/</g, '&lt;')}</span>
+            <a class="rlink" href="${alidistLink}" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a>
+          </div>
+          <pre class="tdpatch">${rendered}</pre>`;
+        }
+
+        // ── 2. Resolve upstream repo, then fetch commits + intermediate tags ─
         if (!p.ghRepo) {
           const { repo, toTag } = TD.ctx || {};
           if (repo && toTag) {
@@ -2041,70 +2095,98 @@
           }
         }
 
+        // Update the source link in the package row now that we know it
+        if (p.ghRepo) {
+          const srcCell = parentRow.querySelector('td:first-child');
+          if (srcCell && !srcCell.querySelector('a.rlink')) {
+            const lnk = document.createElement('a');
+            lnk.className = 'rlink'; lnk.href = `https://github.com/${p.ghRepo}`;
+            lnk.target = '_blank'; lnk.rel = 'noopener noreferrer';
+            lnk.style.cssText = 'font-size:10px;margin-top:2px;display:block';
+            lnk.textContent = p.ghRepo;
+            srcCell.appendChild(lnk);
+          }
+        }
+
+        let commitsHtml = '';
         if (!p.ghRepo) {
           const recipeUrl = TD.ctx?.repo
             ? `https://github.com/${TD.ctx.repo}/blob/${encodeURIComponent(TD.ctx.toTag || '')}/${p.filename}`
             : '#';
-          detailRow.innerHTML = `<td colspan="5"><div class="cdinn">
-            <span style="color:var(--txf);font-size:var(--xs)">
-              Could not determine source repository for <strong>${p.pkgName}</strong>.
-              <a class="rlink" href="${recipeUrl}" target="_blank" rel="noopener noreferrer" style="margin-left:var(--s2)">View recipe on GitHub ↗</a>
-            </span>
-          </div></td>`;
-          parentRow.after(detailRow);
-          if (btn) { btn.disabled = false; btn.innerHTML = `Commits <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6,9 12,15 18,9"/></svg>`; }
-          return;
-        }
+          commitsHtml = `<div class="tdcomm-hdr" style="margin-top:${patchHtml ? 'var(--s4)' : '0'}">
+            <span>${p.pkgName}</span>
+            <a class="rlink" href="${recipeUrl}" target="_blank" rel="noopener noreferrer">View recipe ↗</a>
+          </div>
+          <span style="color:var(--txf);font-size:var(--xs)">Could not determine upstream repository — no source: URL found in recipe.</span>`;
+        } else if (p.oldTag && p.newTag) {
+          const cmpUrl = `https://api.github.com/repos/${p.ghRepo}/compare/${encodeURIComponent(p.oldTag)}...${encodeURIComponent(p.newTag)}`;
+          const cmp = await ghGet(cmpUrl);
+          const commits = (cmp.commits || []).slice().reverse();
+          const ghCompUrl = `https://github.com/${p.ghRepo}/compare/${encodeURIComponent(p.oldTag)}...${encodeURIComponent(p.newTag)}`;
+          const ghLink = `<a class="rlink" href="${ghCompUrl}" target="_blank" rel="noopener noreferrer">Full diff on GitHub ↗</a>`;
 
-        // Update the source link in the package row now that we know it
-        const srcCell = parentRow.querySelector('td:first-child');
-        if (srcCell && !srcCell.querySelector('a.rlink')) {
-          const lnk = document.createElement('a');
-          lnk.className = 'rlink'; lnk.href = `https://github.com/${p.ghRepo}`;
-          lnk.target = '_blank'; lnk.rel = 'noopener noreferrer';
-          lnk.style.cssText = 'font-size:10px;margin-top:2px;display:block';
-          lnk.textContent = p.ghRepo;
-          srcCell.appendChild(lnk);
-        }
+          // Find intermediate tags whose commit SHA falls within the compare range
+          let interTagsHtml = '';
+          try {
+            const commitSHAs = new Set((cmp.commits || []).map(c => c.sha));
+            if (commitSHAs.size > 0) {
+              const interTags = [];
+              for (let pg = 1; pg <= 4; pg++) {
+                const batch = await ghGet(`https://api.github.com/repos/${p.ghRepo}/tags?per_page=100&page=${pg}`).catch(() => []);
+                if (!Array.isArray(batch) || !batch.length) break;
+                for (const t of batch) {
+                  if (commitSHAs.has(t.commit.sha)) interTags.push(t.name);
+                }
+                if (batch.length < 100) break;
+              }
+              if (interTags.length) {
+                const chips = interTags.map(t =>
+                  `<a class="chip jk" href="https://github.com/${p.ghRepo}/releases/tag/${encodeURIComponent(t)}" target="_blank" rel="noopener noreferrer" style="font-size:10px;text-decoration:none;font-family:var(--fm)">${t.replace(/</g,'&lt;')}</a>`
+                ).join('');
+                interTagsHtml = `<div class="tdcomm-hdr" style="margin-top:var(--s3)">
+                  <span>Intermediate tags in ${p.ghRepo} (${interTags.length})</span>
+                </div><div class="tdintertags">${chips}</div>`;
+              }
+            }
+          } catch {}
 
-        const cmpUrl = `https://api.github.com/repos/${p.ghRepo}/compare/${encodeURIComponent(p.oldTag)}...${encodeURIComponent(p.newTag)}`;
-        const cmp = await ghGet(cmpUrl);
-        const commits = (cmp.commits || []).slice().reverse();
-        const ghCompUrl = `https://github.com/${p.ghRepo}/compare/${encodeURIComponent(p.oldTag)}...${encodeURIComponent(p.newTag)}`;
-        const ghLink = `<a class="rlink" href="${ghCompUrl}" target="_blank" rel="noopener noreferrer">Full diff on GitHub ↗</a>`;
-
-        if (!commits.length) {
-          detailRow.innerHTML = `<td colspan="5"><div class="cdinn">
-            <div class="tdcomm-hdr"><span>${p.pkgName} — ${p.ghRepo}</span>${ghLink}</div>
+          if (!commits.length) {
+            commitsHtml = `<div class="tdcomm-hdr" style="margin-top:${patchHtml ? 'var(--s4)' : '0'}">
+              <span>${p.pkgName} — ${p.ghRepo}</span>${ghLink}
+            </div>
             <span style="color:var(--txf);font-size:var(--xs)">No commits found between <code>${p.oldTag}</code> and <code>${p.newTag}</code>.</span>
-          </div></td>`;
-        } else {
-          const items = commits.map(c => {
-            const rawMsg = (c.commit.message.split('\n')[0] || '').slice(0, 160);
-            const escapedMsg = rawMsg.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            const linkedMsg = tdLinkPRs(escapedMsg, p.ghRepo);
-            const sha = c.sha.slice(0, 7);
-            const author = (c.commit.author?.name || c.author?.login || '').replace(/</g, '&lt;');
-            const when = c.commit.author?.date ? relT(c.commit.author.date) : '';
-            // Detect merge commits to highlight them
-            const isMerge = /^Merge pull request/i.test(rawMsg);
-            return `<div class="cdi" style="max-width:640px;min-width:260px${isMerge ? ';border-color:var(--prhi)' : ''}">
-              <a class="cdl" href="${c.html_url}" target="_blank" rel="noopener noreferrer" style="font-family:var(--fm);font-size:11px;flex-shrink:0;min-width:46px">${sha}</a>
-              <span class="cdn" title="${rawMsg.replace(/"/g,"'")}">${linkedMsg}</span>
-              ${author ? `<span class="cdt" style="flex-shrink:0">${author}</span>` : ''}
-              ${when ? `<span class="cdt" style="flex-shrink:0">${when}</span>` : ''}
-            </div>`;
-          }).join('');
-          const mergeCount = commits.filter(c => /^Merge pull request/i.test(c.commit.message)).length;
-          const prNote = mergeCount ? ` · ${mergeCount} PR merge${mergeCount !== 1 ? 's' : ''} (highlighted)` : '';
-          detailRow.innerHTML = `<td colspan="5"><div class="cdinn" style="flex-wrap:wrap">
-            <div class="tdcomm-hdr">
+            ${interTagsHtml}`;
+          } else {
+            const items = commits.map(c => {
+              const rawMsg = (c.commit.message.split('\n')[0] || '').slice(0, 160);
+              const escapedMsg = rawMsg.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              const linkedMsg = tdLinkPRs(escapedMsg, p.ghRepo);
+              const sha = c.sha.slice(0, 7);
+              const author = (c.commit.author?.name || c.author?.login || '').replace(/</g, '&lt;');
+              const when = c.commit.author?.date ? relT(c.commit.author.date) : '';
+              const isMerge = /^Merge pull request/i.test(rawMsg);
+              return `<div class="cdi" style="max-width:640px;min-width:260px${isMerge ? ';border-color:var(--prhi)' : ''}">
+                <a class="cdl" href="${c.html_url}" target="_blank" rel="noopener noreferrer" style="font-family:var(--fm);font-size:11px;flex-shrink:0;min-width:46px">${sha}</a>
+                <span class="cdn" title="${rawMsg.replace(/"/g,"'")}">${linkedMsg}</span>
+                ${author ? `<span class="cdt" style="flex-shrink:0">${author}</span>` : ''}
+                ${when ? `<span class="cdt" style="flex-shrink:0">${when}</span>` : ''}
+              </div>`;
+            }).join('');
+            const mergeCount = commits.filter(c => /^Merge pull request/i.test(c.commit.message)).length;
+            const prNote = mergeCount ? ` · ${mergeCount} PR merge${mergeCount !== 1 ? 's' : ''} (highlighted)` : '';
+            commitsHtml = `<div class="tdcomm-hdr" style="margin-top:${patchHtml ? 'var(--s4)' : '0'}">
               <span>${p.pkgName} — ${commits.length} commit${commits.length !== 1 ? 's' : ''}${prNote}</span>
               ${ghLink}
             </div>
             ${items}
-          </div></td>`;
+            ${interTagsHtml}`;
+          }
         }
+
+        detailRow.innerHTML = `<td colspan="5"><div class="cdinn" style="flex-wrap:wrap;flex-direction:column;align-items:stretch">
+          ${patchHtml}
+          ${commitsHtml}
+        </div></td>`;
       } catch (e) {
         detailRow.innerHTML = `<td colspan="5"><div class="cdinn"><span style="color:var(--err);font-size:var(--xs)">Error: ${e.message.replace(/</g, '&lt;')}</span></div></td>`;
       }
@@ -2174,10 +2256,15 @@
       return sel.value || 'alisw/alidist';
     }
 
-    // Known ALICE O2 tag group patterns for alisw/alidist repositories.
-    // Each entry is a prefix that, combined with a year suffix, targets one build category.
-    // matching-refs returns all tags for that prefix instantly (API ignores per_page).
-    const TD_TAG_PATTERNS = [
+    // Prefixes used across all ALICE O2 repos when combined with a year suffix.
+    // matching-refs returns matching tags instantly without paginating thousands of entries.
+    const TD_TAG_PATTERNS_COMMON = [
+      'daily-',
+      'nightly-',
+      'async-',
+    ];
+    // Additional alidist-specific prefixes (O2PDPSuite, O2Physics, etc.)
+    const TD_TAG_PATTERNS_ALIDIST = [
       'O2PDPSuite-daily-',
       'O2PDPSuite-nightly-',
       'O2PDPSuite-gpu-nightly-',
@@ -2213,32 +2300,35 @@
         const seen = new Set();
         const inRange = [];
 
-        if (isAlidist) {
-          // For alidist repos: fire all pattern×year combinations in parallel.
-          // Each matching-refs call returns only tags for that specific build category,
-          // avoiding the 2.5 MB cost of fetching all 6000+ O2 tags at once.
-          const tasks = [];
-          for (const year of years) {
-            for (const pattern of TD_TAG_PATTERNS) {
-              const url = `https://api.github.com/repos/${repo}/git/matching-refs/tags/${encodeURIComponent(pattern + year)}`;
-              tasks.push(ghGet(url).catch(() => []));
+        // Phase 1: matching-refs fast path — works for all repos using date-embedded tags.
+        // Fires all prefix×year combos in parallel; each call returns only matching tags
+        // instantly, avoiding the need to paginate through thousands of unrelated tags.
+        const patterns = isAlidist
+          ? [...TD_TAG_PATTERNS_COMMON, ...TD_TAG_PATTERNS_ALIDIST]
+          : TD_TAG_PATTERNS_COMMON;
+        const refTasks = [];
+        for (const year of years) {
+          for (const pattern of patterns) {
+            const url = `https://api.github.com/repos/${repo}/git/matching-refs/tags/${encodeURIComponent(pattern + year)}`;
+            refTasks.push(ghGet(url).catch(() => []));
+          }
+        }
+        const refResults = await Promise.all(refTasks);
+        for (const batch of refResults) {
+          for (const ref of (Array.isArray(batch) ? batch : [])) {
+            const tagName = ref.ref.replace('refs/tags/', '');
+            if (seen.has(tagName)) continue;
+            seen.add(tagName);
+            const d = tdTagEmbeddedDate(tagName);
+            if (!d) continue;
+            if ((!toDate || d <= toDate) && (!fromDate || d >= fromDate)) {
+              inRange.push({ name: tagName });
             }
           }
-          const results = await Promise.all(tasks);
-          for (const batch of results) {
-            for (const ref of (Array.isArray(batch) ? batch : [])) {
-              const tagName = ref.ref.replace('refs/tags/', '');
-              if (seen.has(tagName)) continue;
-              seen.add(tagName);
-              const d = tdTagEmbeddedDate(tagName);
-              if (!d) continue;
-              if ((!toDate || d <= toDate) && (!fromDate || d >= fromDate)) {
-                inRange.push({ name: tagName });
-              }
-            }
-          }
-        } else {
-          // Generic repos: paginate /tags and filter by embedded date in name.
+        }
+
+        // Phase 2: pagination fallback for repos that don't use the common prefixes.
+        if (!inRange.length) {
           for (let page = 1; page <= 20; page++) {
             const batch = await ghGet(`https://api.github.com/repos/${repo}/tags?per_page=100&page=${page}`).catch(() => []);
             if (!Array.isArray(batch) || !batch.length) break;
@@ -2260,7 +2350,7 @@
 
         const label = TD.tags.length
           ? `● ${TD.tags.length} tag${TD.tags.length !== 1 ? 's' : ''} found`
-          : `● no tags found — check prefix "${prefix}" and date range`;
+          : `● no tags found in date range`;
         if (status) { status.textContent = label; status.className = TD.tags.length ? 'tsts ok' : 'tsts miss'; }
 
         tdUpdateChips('from');
