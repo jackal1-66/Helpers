@@ -997,6 +997,17 @@
       font-weight: 600;
       color: var(--txm)
     }
+
+    /* ── AliMonitor Jobs ──────────────────── */
+    .jbprog { display:flex; height:6px; border-radius:var(--r-full); overflow:hidden; background:var(--surfoff); min-width:100px }
+    .jbprog .jbdone { background:var(--ok) }
+    .jbprog .jbrun { background:var(--warn) }
+    .jbprog .jberr { background:var(--err) }
+    .jbst { font-size:10px; font-family:var(--fm); display:flex; gap:var(--s2); flex-wrap:wrap; margin-top:2px }
+    .jb-import-box { margin-top:var(--s3); padding:var(--s3) var(--s4); background:var(--surfoff); border-radius:var(--r); border:1px solid var(--bord) }
+    .jb-paste-ta { width:100%; min-height:70px; max-height:200px; font-family:var(--fm); font-size:11px; resize:vertical; background:var(--surf2); color:var(--fg); border:1px solid var(--bord); border-radius:var(--r); padding:var(--s2); box-sizing:border-box; margin-top:var(--s2) }
+    .jb-bkmklt-link { display:inline-block; padding:1px 7px; background:var(--acc); color:#fff; border-radius:var(--r); text-decoration:none; font-size:11px; cursor:grab; white-space:nowrap }
+    .jb-bkmklt-link:hover { opacity:.85 }
   </style>
 </head>
 
@@ -1066,6 +1077,9 @@
     const REPOS = window.REPOS_CONFIG || [];
     const WATCH_DEFAULT = 'jackal1-66';
     function getWatch() { return (document.getElementById('ghwatch').value.trim() || WATCH_DEFAULT).toLowerCase(); }
+    const JB_PP_URL   = 'https://alimonitor.cern.ch/MC/prodDetails.jsp?tag=LHC22k5_nightly';
+    const JB_PBPB_URL = 'https://alimonitor.cern.ch/MC/prodDetails.jsp?tag=LHC22k4_nightly';
+    const JOBS_DEFAULT_URL = JB_PP_URL;
     const S = {
       prs: Object.fromEntries(REPOS.map(r => [r.id, null])),
       ci: {}, inv: {}, tab: REPOS[0]?.id || '', expCI: new Set(), jkOnly: false,
@@ -1073,6 +1087,7 @@
       closedPrs: Object.fromEntries([...REPOS.map(r => r.id), 'all'].map(id => [id, null])),
       closedSince: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
     };
+    const JB = { jobs: null, loading: false };
 
     // ── Token ─────────────────────────────────
     function loadToken() {
@@ -1116,7 +1131,8 @@
       document.getElementById('maintabs').innerHTML =
         REPOS.map((r, i) => `<button class="tab${i === 0 ? ' active' : ''}" role="tab" data-rid="${r.id}" aria-selected="${i === 0}">${r.id}<span class="tcount" id="cnt-${r.id}">–</span></button>`).join('') +
         `<button class="tab" role="tab" data-rid="all" aria-selected="false">All<span class="tcount" id="cnt-all">–</span></button>` +
-        `<button class="tab" role="tab" data-rid="tagdiff" aria-selected="false"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px;margin-right:3px"><polyline points="16,3 21,3 21,8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21,16 21,21 16,21"/><line x1="4" y1="4" x2="21" y2="21"/></svg>Tag Diff</button>`;
+        `<button class="tab" role="tab" data-rid="tagdiff" aria-selected="false"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px;margin-right:3px"><polyline points="16,3 21,3 21,8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21,16 21,21 16,21"/><line x1="4" y1="4" x2="21" y2="21"/></svg>Tag Diff</button>` +
+        `<button class="tab" role="tab" data-rid="jobs" aria-selected="false"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px;margin-right:3px"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>Jobs</button>`;
       document.getElementById('secroot').innerHTML = [...REPOS, { id: 'all', full: '' }].map((r, i) => {
         const isAll = r.id === 'all', title = isAll ? 'All Repositories' : r.full;
         const ghLink = isAll ? '' :
@@ -1232,6 +1248,62 @@
     </div>
   </div>
   <div id="td-result"></div>
+</div>`;
+      const bmk = "javascript:(async function(){if(!location.href.includes('alimonitor')){alert('Run on alimonitor.cern.ch only.');return;}if(!window.opener){alert('Open via Quick Load in the ALICE dashboard.');return;}var info=document.createElement('div');info.style='position:fixed;top:10px;right:10px;padding:8px 14px;background:#222;color:#eee;z-index:99999;border-radius:6px;font-size:13px';info.textContent='Fetching live job status…';document.body.appendChild(info);var t=null;[].forEach.call(document.querySelectorAll('table'),function(x){if(t)return;var hit=0;[].forEach.call(x.querySelectorAll(':scope > tbody > tr'),function(tr){var c=[].slice.call(tr.querySelectorAll(':scope > td'));if(c.length>=5&&/^\\d{5,6}$/.test(c[0].textContent.trim()))hit++;});if(hit>=3)t=x;});if(!t){info.remove();alert('No production data found.');return;}var allRows=[].slice.call(t.querySelectorAll(':scope > tbody > tr'));var hdrs=[];[].forEach.call(allRows,function(tr){if(hdrs.length)return;var cells=[].slice.call(tr.querySelectorAll(':scope > td'));if(cells.length>=5&&/run/i.test(cells[0].textContent)){[].forEach.call(cells,function(td){hdrs.push(td.textContent.trim());});}});var rows=[];[].forEach.call(allRows,function(tr){var cells=[].slice.call(tr.querySelectorAll(':scope > td'));if(cells.length<5||!/^\\d{5,6}$/.test(cells[0].textContent.trim()))return;rows.push([].map.call(cells,function(td){var a=td.querySelector('a');return{txt:td.textContent.trim(),href:a?a.href:''}}));});var liveData={};await Promise.all(rows.map(async function(row){var pid=row[1]&&row[1].txt.replace(/\\s/g,'');if(!pid||!/^\\d+$/.test(pid))return;try{var resp=await fetch('/agent/jobs/details.jsp?pid='+pid);var text=await resp.text();var mRun=text.match(/RUNNING[^(]*\\((\\d+)\\s*jobs?/i);var mDone=text.match(/DONE[^(]*\\((\\d+)\\s*jobs?/i);liveData[pid]={running:mRun?parseInt(mRun[1],10):0,done:mDone?parseInt(mDone[1],10):0};}catch(e){liveData[pid]={running:-1,done:-1};}}));info.remove();window.opener.postMessage({type:'jb_import',headers:hdrs,rows:rows,liveData:liveData,src:location.href},'*');window.close();})();";
+      document.getElementById('secroot').innerHTML += `<div id="sec-jobs" class="rsec">
+  <div class="shdr">
+    <div><h1 class="stitle">AliMonitor Jobs</h1><div class="smeta" id="meta-jobs">Select pp or PbPb to load</div></div>
+    <a class="rlink" id="jb-amlink" href="${JB_PP_URL}" target="_blank" rel="noopener noreferrer">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      Open on AliMonitor
+    </a>
+  </div>
+  <div class="tbar">
+    <button class="rbtn jb-preset" data-url="${JB_PP_URL}" data-label="pp (LHC22k5_nightly)">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13,2 3,14 12,14 11,22 21,10 12,10"/></svg> pp
+    </button>
+    <button class="rbtn jb-preset" data-url="${JB_PBPB_URL}" data-label="PbPb (LHC22k4_nightly)">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13,2 3,14 12,14 11,22 21,10 12,10"/></svg> PbPb
+    </button>
+    <span style="flex:1"></span>
+    <span class="thint" style="margin:0;align-self:center;white-space:nowrap">Setup (once): drag to bookmark bar → <a href="${bmk}" id="jb-bkmklt-a" class="jb-bkmklt-link" draggable="true">AliMonitor Helper ☆</a></span>
+    <span style="flex-basis:100%;height:0;margin:0"></span>
+    <label for="am-url" style="color:var(--fg2);font-size:11px;margin-top:var(--s3)">Custom URL</label>
+    <input class="tinput" type="text" id="am-url" style="flex:1;min-width:220px;margin-top:var(--s3)" value="${JB_PP_URL}">
+    <button class="rbtn" id="jb-rbtn" style="margin-top:var(--s3)">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      Load
+    </button>
+  </div>
+  <div id="jb-popup-status" class="jb-import-box" style="display:none">
+    <div style="font-size:12px;line-height:1.6;margin-bottom:var(--s2)">
+      <b>AliMonitor opened in a popup.</b> Once it loads, click <b>AliMonitor Helper</b> in your bookmarks bar — data imports automatically and the popup closes.<br>
+      <small style="color:var(--fg2)">Haven't added the bookmark yet? Drag <a href="${bmk}" id="jb-bkmklt-b" class="jb-bkmklt-link" draggable="true">AliMonitor Helper ☆</a> to your bar now, then click it in the popup.</small>
+    </div>
+    <div style="display:flex;gap:var(--s2);flex-wrap:wrap">
+      <button class="rbtn" id="jb-popup-cancel" style="background:var(--surfoff)">✕ Cancel</button>
+      <button class="rbtn" id="jb-clipboard-btn" style="background:var(--surfoff)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="2" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Import from clipboard
+      </button>
+      <button class="rbtn" id="jb-paste-toggle" style="background:var(--surfoff)">Paste HTML…</button>
+    </div>
+    <div id="jb-paste-wrap" style="display:none;margin-top:var(--s2)">
+      <textarea class="jb-paste-ta" id="jb-paste-ta" placeholder="Paste alimonitor page source here (Ctrl+U → Ctrl+A → Ctrl+C → paste)…"></textarea>
+      <button class="rbtn" id="jb-paste-btn" style="margin-top:var(--s2)">Parse &amp; Import</button>
+    </div>
+  </div>
+  <div id="jb-errc"></div>
+  <div class="twrap"><table class="ptbl">
+    <thead><tr>
+      <th style="width:66px">Run #</th><th style="width:90px">PID</th><th>Packages</th>
+      <th style="width:106px">Date</th><th style="width:60px;text-align:right">Events</th>
+      <th style="width:54px;text-align:right">Size</th><th style="width:66px">Run time</th>
+      <th>Output dir</th><th style="width:90px;text-align:center">Status</th>
+    </tr></thead>
+    <tbody id="jb-tbody"></tbody>
+  </table></div>
+  <div class="lupd" id="jb-lupd"></div>
 </div>`;
       document.querySelectorAll('[data-fi]').forEach(el => el.addEventListener('input', renderTab));
       document.querySelectorAll('[data-fci]').forEach(el => el.addEventListener('change', renderTab));
@@ -1706,6 +1778,7 @@
       t.classList.add('active'); t.setAttribute('aria-selected', 'true'); S.tab = t.dataset.rid;
       document.querySelectorAll('.rsec').forEach(s => s.classList.remove('active'));
       document.getElementById('sec-' + S.tab)?.classList.add('active'); renderTab();
+      // jobs tab: no auto-load, user picks pp/PbPb or custom URL
     });
     document.getElementById('rbtn').addEventListener('click', loadAll);
     document.getElementById('ghtok').addEventListener('input', () => { updTok(); clearTimeout(window._tt); window._tt = setTimeout(loadAll, 800); });
@@ -1732,7 +1805,7 @@
       renderTab();
       Object.keys(S.closedPrs).filter(rid => S.closedPrs[rid]).forEach(rid => renderClosedTbl(rid, S.closedPrs[rid]));
     }
-    buildSections(); loadToken(); loadWatch(); loadAll();
+    buildSections(); loadToken(); loadWatch(); loadAll(); jbInit();
     document.getElementById('ghwatch').addEventListener('input', () => { updWatch(); reloadInv(); });
 
     // ── Tag Diff ──────────────────────────────────────────────────────────────
@@ -2242,6 +2315,331 @@
       document.getElementById('td-from')?.addEventListener('change', () => tdUpdateChips('from'));
       document.getElementById('td-to')?.addEventListener('change', () => tdUpdateChips('to'));
     })();
+    // ── AliMonitor Jobs ──────────────────────────────────────────────────────
+
+    function jbInit() {
+      const inp = document.getElementById('am-url');
+      const savedUrl = localStorage.getItem('am_jobs_url');
+      if (savedUrl && inp) inp.value = savedUrl;
+
+      // Preset quick-load buttons
+      document.querySelectorAll('.jb-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const url = btn.dataset.url, label = btn.dataset.label;
+          localStorage.setItem('am_jobs_url', url);
+          if (inp) inp.value = url;
+          jbOpenPopup(url, label);
+        });
+      });
+
+      // Custom URL load button
+      document.getElementById('jb-rbtn')?.addEventListener('click', () => {
+        const url = (inp?.value || '').trim() || JB_PP_URL;
+        localStorage.setItem('am_jobs_url', url);
+        jbOpenPopup(url);
+      });
+
+      // Cancel popup
+      document.getElementById('jb-popup-cancel')?.addEventListener('click', () => {
+        document.getElementById('jb-popup-status').style.display = 'none';
+      });
+
+      // Clipboard / paste buttons
+      document.getElementById('jb-clipboard-btn')?.addEventListener('click', jbImportClipboard);
+      document.getElementById('jb-paste-toggle')?.addEventListener('click', () => {
+        const w = document.getElementById('jb-paste-wrap');
+        if (w) w.style.display = w.style.display === 'none' ? '' : 'none';
+      });
+      document.getElementById('jb-paste-btn')?.addEventListener('click', () => {
+        const ta = document.getElementById('jb-paste-ta');
+        if (ta?.value.trim()) jbImportHtml(ta.value); else showJobsErr('Paste field is empty.');
+      });
+
+      // Bookmarklet postMessage listener
+      window.addEventListener('message', e => {
+        console.log('[ALICE Jobs] message from', e.origin, '| type:', e.data?.type, '| has headers:', !!e.data?.headers, '| has html:', !!e.data?.html, '| liveData keys:', Object.keys(e.data?.liveData || {}).length);
+        console.log('[ALICE Jobs] liveData sample:', JSON.stringify(e.data?.liveData || {}).slice(0, 300));
+        if (!String(e.origin).includes('alimonitor.cern.ch')) {
+          console.warn('[ALICE Jobs] rejected origin:', e.origin);
+          return;
+        }
+        if (e.data?.type !== 'jb_import') return;
+        if (e.data.headers && e.data.rows) {
+          jbImportData(e.data.headers, e.data.rows, e.data.liveData || {});
+        } else if (e.data.html) {
+          jbImportHtml(e.data.html);
+        }
+      });
+
+      // Restore cached jobs
+      try {
+        const raw = localStorage.getItem('jb_jobs_cache');
+        if (raw) {
+          const { jobs, ts } = JSON.parse(raw);
+          if (Array.isArray(jobs) && jobs.length) {
+            JB.jobs = jobs;
+            renderJobsTbl();
+            const age = Math.round((Date.now() - ts) / 60000);
+            const m = document.getElementById('meta-jobs');
+            if (m) m.textContent = `${jobs.length} job${jobs.length !== 1 ? 's' : ''} · cached ${age < 1 ? '<1' : age}m ago`;
+            document.getElementById('jb-lupd').textContent = 'Last imported: ' + new Date(ts).toLocaleString();
+          }
+        }
+      } catch {}
+    }
+
+    function jbOpenPopup(url, label) {
+      window.open(url, 'am_popup');
+      const lnk = document.getElementById('jb-amlink');
+      if (lnk) lnk.href = url;
+      const panel = document.getElementById('jb-popup-status');
+      if (panel) panel.style.display = '';
+      const pw = document.getElementById('jb-paste-wrap');
+      if (pw) pw.style.display = 'none';
+      clrJobsErr();
+      const m = document.getElementById('meta-jobs');
+      const tag = label || url.split('=').pop() || 'jobs';
+      if (m) m.textContent = 'Waiting for ' + tag + '…';
+    }
+
+    function clrJobsErr() { const e = document.getElementById('jb-errc'); if (e) e.innerHTML = ''; }
+    function showJobsErr(msg) {
+      const e = document.getElementById('jb-errc');
+      if (e) e.innerHTML = `<div class="errbn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span>${msg}</span></div>`;
+    }
+
+    function jbImportHtml(html) {
+      clrJobsErr();
+      try {
+        const jobs = parseJobsHTML(html);
+        if (!jobs || jobs.length === 0) {
+          showJobsErr('No jobs found in pasted content. Make sure you copied the full page source from alimonitor (Ctrl+U → Ctrl+A → Ctrl+C).');
+          return;
+        }
+        JB.jobs = jobs;
+        localStorage.setItem('jb_jobs_cache', JSON.stringify({ jobs, ts: Date.now() }));
+        document.getElementById('jb-popup-status').style.display = 'none';
+        renderJobsTbl();
+        const m = document.getElementById('meta-jobs');
+        if (m) m.textContent = `${jobs.length} job${jobs.length !== 1 ? 's' : ''} · imported`;
+        document.getElementById('jb-lupd').textContent = 'Imported: ' + new Date().toLocaleString();
+        document.getElementById('jb-paste-ta').value = '';
+      } catch (e) {
+        showJobsErr('Parse error: ' + e.message);
+      }
+    }
+
+    async function jbImportClipboard() {
+      clrJobsErr();
+      try {
+        const text = await navigator.clipboard.readText();
+        if (!text || text.length < 200) throw new Error('Clipboard appears empty. Make sure you copied the full alimonitor page source.');
+        jbImportHtml(text);
+      } catch (e) {
+        if (e.name === 'NotAllowedError' || e.name === 'SecurityError') {
+          document.getElementById('jb-paste-wrap').style.display = '';
+          showJobsErr('Clipboard access denied by browser. Paste the page source manually in the text area below.');
+        } else {
+          showJobsErr(e.message);
+        }
+      }
+    }
+
+    function jbJobStatus(j) {
+      const sz = (j.size || '').trim().toLowerCase().replace(/\s+/g, '');
+      const noSize = sz === '0b' || sz === '0' || sz === '' || sz === '-';
+      // Use live subjob count when available
+      if (j.liveRunning > 0)  return 'running';
+      if (j.liveRunning === 0) return noSize ? 'failed' : 'done';
+      // Fallback: static data heuristic
+      const rt = (j.runTime || j.jobRunning || '').trim();
+      const noRun = rt === '' || rt === '-';
+      if (noSize && noRun) return 'failed';
+      if (!noSize)          return 'done';
+      return 'running';
+    }
+
+    function jbStatusHtml(j) {
+      const st = jbJobStatus(j);
+      if (st === 'failed')  return '❌ <span style="font-size:11px;color:var(--err)">Failed</span>';
+      if (st === 'running') return '🔄 <span style="font-size:11px;color:var(--warn)">Running</span>';
+      if (st === 'done')    return '✅ <span style="font-size:11px;color:var(--ok)">Done</span>';
+      return '<span style="color:var(--txf);font-size:11px">—</span>';
+    }
+
+    function renderJobsTbl() {
+      const tb = document.getElementById('jb-tbody'); if (!tb) return;
+      const jobs = JB.jobs;
+      if (!jobs || !jobs.length) {
+        const isNull = !jobs;
+        tb.innerHTML = `<tr><td colspan="9" style="padding:0"><div class="empty">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+          <h3>${isNull ? 'Not loaded' : 'No jobs'}</h3>
+          <p>${isNull ? 'Select pp or PbPb to load.' : 'No jobs matched the query.'}</p>
+        </div></td></tr>`;
+        return;
+      }
+      tb.innerHTML = jobs.map(j => {
+        const runUrl = j.run ? `https://alimonitor.cern.ch/jdl/${j.pid}.html` : '';
+        const runHtml = runUrl
+          ? `<a href="${runUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--pr);text-decoration:none">${j.run}</a>`
+          : (j.run || '—');
+        const pidUrl = j.pid ? `https://alimonitor.cern.ch/agent/jobs/details.jsp?pid=${j.pid}` : '';
+        const pidHtml = pidUrl
+          ? `<a href="${pidUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--pr);text-decoration:none;font-family:var(--fm);font-size:11px">${j.pid}</a>`
+          : `<span style="font-family:var(--fm);font-size:11px;color:var(--txm)">${j.pid || '—'}</span>`;
+        const pkgShort = j.packages || '';
+        const evNum = Number(String(j.events || '').replace(/\D/g, ''));
+        const evFmt = evNum ? evNum.toLocaleString() : (j.events || '—');
+        const outFull = j.outputDir || '';
+        const outShort = outFull || '—';
+        const outUrl = outFull ? `https://alimonitor.cern.ch/catalogue/index.jsp?path=${encodeURIComponent(outFull)}` : '';
+        return `<tr>
+          <td class="pnum">${runHtml}</td>
+          <td class="pnum">${pidHtml}</td>
+          <td style="font-family:var(--fm);font-size:11px;color:var(--txm)" title="${(j.packages||'').replace(/"/g,'&quot;')}">${pkgShort || '—'}</td>
+          <td class="pdate">${j.date || '—'}</td>
+          <td style="font-size:11px;font-family:var(--fm);color:var(--txm);text-align:right">${evFmt}</td>
+          <td style="font-size:11px;font-family:var(--fm);color:var(--txm);text-align:right">${j.size || '—'}</td>
+          <td style="font-size:11px;font-family:var(--fm);color:var(--txm)">${j.runTime || '—'}</td>
+          <td style="font-size:11px;font-family:var(--fm);color:var(--txm);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${outFull.replace(/"/g,'&quot;')}">${outUrl ? `<a href="${outUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--pr);text-decoration:none">${outShort}</a>` : (outShort || '—')}</td>
+          <td style="text-align:center;white-space:nowrap">${jbStatusHtml(j)}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function parseJobsJSON(data) {
+      const arr = Array.isArray(data) ? data
+        : Array.isArray(data?.data) ? data.data
+        : Array.isArray(data?.jobs) ? data.jobs
+        : [];
+      return arr.map(j => ({
+        run: j.run_no ?? j.run ?? j.run_number ?? '',
+        pid: String(j.master_jobid ?? j.pid ?? j.masterjobid ?? j.jdl_pid ?? ''),
+        owner: j.owner ?? '',
+        events: j.split_events ?? j.events ?? '',
+        packages: j.packages ?? j.package ?? '',
+        date: j.ctime ?? j.date ?? j.creation ?? '',
+        outputDir: j.outputdir ?? j.output_dir ?? j.path ?? '',
+        jobType: j.jobtype ?? j.type ?? j.jdl_type ?? '',
+        total:   j.total_subjobs ?? j.total   ?? null,
+        done:    j.done_subjobs  ?? j.done    ?? null,
+        running: j.running_subjobs ?? j.running ?? null,
+        errors:  j.error_subjobs ?? j.errors  ?? j.failed ?? null,
+      }));
+    }
+
+    function parseJobsData(headers, rows, liveData) {
+      liveData = liveData || {};
+      const hdrs = headers.map(h => h.trim().toLowerCase());
+      const ci = s => { const i = hdrs.findIndex(h => h.includes(s)); return i >= 0 ? i : null; };
+
+      const colRun     = ci('run#') ?? ci('run #') ?? ci('run no') ?? 0;
+      const colPid     = ci('pid') ?? ci('master') ?? 1;
+      const colEv      = ci('event') ?? ci('split') ?? 3;
+      const colPkg     = ci('pack') ?? 4;
+      const colDate    = ci('date') ?? ci('creat') ?? ci('start') ?? 5;
+      const colOut     = ci('output dir') ?? ci('outputdir') ?? ci('output') ?? ci('dir') ?? 7;
+      const colSize    = ci('size') ?? ci('bytes') ?? ci('gb') ?? 13;
+      const colRunTime = ci('running') ?? ci('cpu') ?? ci('elapsed') ?? ci('wall') ?? ci('time') ?? ci('duration') ?? 11;
+      const colRunning = colRunTime;
+
+      console.log('[ALICE Jobs] headers:', hdrs);
+      console.log('[ALICE Jobs] columns:', { colRun, colPid, colPkg, colDate, colEv, colOut, colSize, colRunTime, colRunning });
+
+      const txt = (cells, i) => (i !== null && i !== undefined && cells[i]) ? cells[i].txt : '';
+      const href = (cells, i) => (i !== null && i !== undefined && cells[i]) ? cells[i].href : '';
+
+      return rows
+        .filter(cells => { const pid = txt(cells, colPid).replace(/\s/g, ''); return /^\d{4,}$/.test(pid); })
+        .map(cells => {
+          const pid = txt(cells, colPid).replace(/\s/g, '');
+          const live = liveData[pid] || {};
+          return {
+            run: txt(cells, colRun), runLink: href(cells, colRun),
+            pid, pidLink: href(cells, colPid),
+            packages: txt(cells, colPkg), date: txt(cells, colDate),
+            events: txt(cells, colEv), outputDir: txt(cells, colOut),
+            size: txt(cells, colSize), runTime: txt(cells, colRunTime),
+            jobRunning: txt(cells, colRunning),
+            liveRunning: live.running !== undefined ? live.running : -1,
+          };
+        });
+    }
+
+    function jbImportData(headers, rows, liveData) {
+      clrJobsErr();
+      try {
+        const jobs = parseJobsData(headers, rows, liveData || {});
+        if (!jobs || jobs.length === 0) {
+          showJobsErr('No jobs found. Check the browser console for detected column names.');
+          return;
+        }
+        JB.jobs = jobs;
+        localStorage.setItem('jb_jobs_cache', JSON.stringify({ jobs, ts: Date.now() }));
+        document.getElementById('jb-popup-status').style.display = 'none';
+        renderJobsTbl();
+        const m = document.getElementById('meta-jobs');
+        if (m) m.textContent = `${jobs.length} job${jobs.length !== 1 ? 's' : ''} · imported`;
+        document.getElementById('jb-lupd').textContent = 'Imported: ' + new Date().toLocaleString();
+      } catch (e) {
+        showJobsErr('Parse error: ' + e.message);
+      }
+    }
+
+    function parseJobsHTML(html) {
+      const AM_BASE = 'https://alimonitor.cern.ch';
+      const doc = (new DOMParser()).parseFromString(html, 'text/html');
+      let mainTable = null, maxRows = 0;
+      doc.querySelectorAll('table').forEach(t => {
+        const n = t.querySelectorAll('tr').length;
+        if (n > maxRows) { maxRows = n; mainTable = t; }
+      });
+      if (!mainTable || maxRows < 2) return [];
+
+      const hdrs = [];
+      mainTable.querySelectorAll('th').forEach(th => hdrs.push(th.textContent.trim().toLowerCase()));
+      const ci = s => { const i = hdrs.findIndex(h => h.includes(s)); return i >= 0 ? i : null; };
+
+      const colRun     = ci('run #') ?? ci('run#') ?? ci('run no') ?? 0;
+      const colPid     = ci('pid') ?? ci('master') ?? 1;
+      const colOwn     = ci('owner') ?? 2;
+      const colEv      = ci('event') ?? ci('split') ?? 3;
+      const colPkg     = ci('pack') ?? 4;
+      const colDate    = ci('date') ?? ci('creat') ?? ci('start') ?? 5;
+      const colOut     = ci('output dir') ?? ci('outputdir') ?? ci('output') ?? null;
+      const colSize    = ci('size') ?? null;
+      const colRunTime = ci('cpu') ?? ci('elapsed') ?? ci('wall') ?? ci('runtime') ?? null;
+      const colRunning = ci('running') ?? null;
+
+      const jobs = [];
+      mainTable.querySelectorAll('tbody tr').forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length < 4) return;
+        const txt = i => (i !== null && i !== undefined) ? (cells[i]?.textContent.trim() ?? '') : '';
+        const lnk = i => {
+          if (i === null || i === undefined) return '';
+          const a = cells[i]?.querySelector('a');
+          if (!a) return '';
+          const raw = a.getAttribute('href') || '';
+          if (!raw) return '';
+          if (/^https?:\/\//i.test(raw)) return raw;
+          return AM_BASE + (raw.startsWith('/') ? raw : '/' + raw);
+        };
+        const pid = txt(colPid).replace(/\s/g, '');
+        if (!pid || !/^\d{4,}$/.test(pid)) return;
+        jobs.push({
+          run: txt(colRun), runLink: lnk(colRun),
+          pid, pidLink: lnk(colPid),
+          owner: txt(colOwn), events: txt(colEv),
+          packages: txt(colPkg), date: txt(colDate),
+          outputDir: txt(colOut), size: txt(colSize),
+          runTime: txt(colRunTime), jobRunning: txt(colRunning),
+        });
+      });
+      return jobs;
+    }
+
   </script>
 </body>
 
